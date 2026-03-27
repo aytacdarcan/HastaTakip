@@ -1,2 +1,2 @@
 # HastaTakip
-A patient tracking system with visit management, growth charts and lab results, built using ASP.NET Core and Blazor.
+A full-stack patient tracking system with growth analysis features, built using ASP.NET Core Web API and Blazor Server.
