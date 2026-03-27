@@ -1,0 +1,148 @@
+﻿@page "/ziyaretler/{ziyaretId:int}/lab"
+@rendermode InteractiveServer
+@inject HastaTakip.UI.Services.HastaApi Api
+@using HastaTakip.UI.Dtos
+
+<h3>Ziyaret Laboratuvar Sonuçları</h3>
+
+@if (parametreler.Count > 0)
+{
+    <div class="card p-3 mb-3">
+        <h6>Yeni Lab Sonucu Ekle</h6>
+
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Parametre</label>
+                <select class="form-select" @bind="form.LabParametreID">
+                    <option value="0">Parametre seç</option>
+                    @foreach (var p in parametreler)
+                    {
+                        <option value="@p.LabParametreID">
+                            @p.Ad (@p.Birim)
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Değer</label>
+                <input class="form-control"
+                       placeholder="Değer"
+                       @bind="form.Deger" />
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Alt</label>
+                <input class="form-control"
+                       type="number"
+                       step="0.01"
+                       @bind="form.RefAlt" />
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Üst</label>
+                <input class="form-control"
+                       type="number"
+                       step="0.01"
+                       @bind="form.RefUst" />
+            </div>
+
+            <div class="col-md-2">
+                <button class="btn btn-primary w-100"
+                        @onclick="SaveLab">
+                    Kaydet
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@if (data is null)
+{
+    <p>Yükleniyor…</p>
+}
+else if (data.Rows.Count == 0)
+{
+    <div style="color:#777; padding:12px; font-style:italic;">
+        Bu ziyarete ait laboratuvar sonucu bulunmamaktadır.
+    </div>
+}
+else
+{
+    <div style="overflow:auto;">
+        <table class="table table-bordered table-sm lab-table">
+            <thead>
+                <tr>
+                    <th>Parametre</th>
+                    @foreach (var d in data.Dates)
+                    {
+                        <th>@d</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in data.Rows)
+                {
+                    <tr>
+                        <td><b>@r.Param</b></td>
+                        @foreach (var v in r.Values)
+                        {
+                            <td>@(v ?? "")</td>
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter] public int ziyaretId { get; set; }
+
+    LabTableDto? data;
+    List<LabParametreDto> parametreler = new();
+
+    LabSonucCreateDto form = new()
+    {
+        Tarih = DateTime.Today
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        parametreler = await Api.GetLabParametrelerAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        data = await Api.GetLabByZiyaretAsync(ziyaretId);
+    }
+
+    async Task SaveLab()
+    {
+        if (form.LabParametreID == 0)
+            return;
+
+        await Api.CreateLabForZiyaretAsync(ziyaretId, form);
+
+        form = new LabSonucCreateDto
+        {
+            Tarih = DateTime.Today
+        };
+
+        data = await Api.GetLabByZiyaretAsync(ziyaretId);
+    }
+}
+
+<style>
+    .lab-table th {
+        background: #f5f6fa;
+        text-align: center;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    .lab-table td {
+        text-align: center;
+        vertical-align: middle;
+    }
+</style>

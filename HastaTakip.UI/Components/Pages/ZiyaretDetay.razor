@@ -1,0 +1,876 @@
+﻿@page "/ziyaretler/{ziyaretId:int}"
+@using HastaTakip.UI.Dtos
+@inject HastaTakip.UI.Services.HastaApi Api
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;">
+    <h5 style="margin:0;">Ziyaret Detay</h5>
+    <button class="btn-blue" @onclick="GeriHasta">Geri</button>
+</div>
+
+
+@if (loading)
+{
+    <p>Yükleniyor…</p>
+}
+else if (!string.IsNullOrEmpty(error))
+{
+    <p style="color:#b00020">@error</p>
+}
+else if (bundle is null)
+{
+    <p>Kayıt bulunamadı.</p>
+}
+else
+{
+    <!--  ZİYARET-->
+    <section style="border:1px solid #eee;border-radius:10px;padding:.75rem;margin-bottom:1rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h5 style="margin:0;">Ziyaret</h5>
+            <button class="btn btn-sm btn-outline-primary" @onclick="ToggleEditVisit">
+                @(editVisit ? "İptal" : "Düzenle")
+            </button>
+        </div>
+
+        @if (!editVisit)
+        {
+            <div style="margin-top:.4rem;color:#444;font-size:.95rem;display:flex;gap:1.5rem;flex-wrap:wrap;">
+                <div>
+                    <strong>Hasta:</strong>
+                    @(string.IsNullOrWhiteSpace(bundle?.Ziyaret?.HastaAd)
+                                ? "-"
+                                : $"{bundle!.Ziyaret.HastaAd} {bundle!.Ziyaret.HastaSoyad}")
+                </div>
+
+                <div>
+                    <strong>Doğum Tarihi:</strong>
+                    @(bundle!.Ziyaret.BirthDate?.ToString("dd.MM.yyyy") ?? "-")
+                </div>
+
+                <div>
+                    <strong>Cinsiyet:</strong>
+                    @SexText
+                </div>
+            </div>
+            <div style="margin-top:.4rem;color:#444;font-size:.95rem;display:flex;gap:1.5rem;flex-wrap:wrap;">
+                <div>
+                    <strong>Ziyaret Tarihi:</strong>
+                    @(bundle!.Ziyaret.Tarih?.ToString("dd.MM.yyyy") ?? "-")
+                </div>
+
+                <div>
+                    <strong>Ziyaret Yaşı:</strong>
+                    @AgeYagText(bundle!.Ziyaret.BirthDate, bundle!.Ziyaret.Tarih)
+                </div>
+            </div>
+            <div style="margin-top:.6rem;">
+                <div style="display:flex;gap:1.5rem;flex-wrap:wrap;">
+                    <div>
+                        <strong>Yakınmalar:</strong>
+                        @(string.IsNullOrWhiteSpace(bundle!.Ziyaret.YakinmalarZiyaret)
+                                        ? "-"
+                                        : bundle!.Ziyaret.YakinmalarZiyaret)
+                    </div>
+
+                    <div>
+                        <strong>Notlar:</strong>
+                        @(string.IsNullOrWhiteSpace(bundle!.Ziyaret.Notlar)
+                                        ? "-"
+                                                : bundle!.Ziyaret.Notlar)
+                    </div>
+                </div>
+            </div>
+
+
+        }
+        else
+        {
+            <div style="border:1px solid #eee;border-radius:10px;padding:.75rem;margin-top:.5rem;">
+                <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.5rem;">
+                    <label>
+                        Ziyaret Tarihi
+                        <InputDate @bind-Value="visitEdit.Tarih" class="form-control" />
+                    </label>
+                    <label>
+                        Notlar
+                        <InputTextArea @bind-Value="visitEdit.Notlar" class="form-control" rows="2" />
+                    </label>
+                </div>
+                <div style="margin-top:.5rem;">
+                    <label>Yakınmalar</label>
+                    <InputTextArea @bind-Value="visitEdit.YakinmalarZiyaret" class="form-control" rows="3" />
+                </div>
+
+                <div style="margin-top:.5rem;color:#555;font-size:.95rem;">
+                    <span><b>Doğum Tarihi:</b> @(bundle!.Ziyaret.BirthDate is { } bd ? $"{bd:dd.MM.yyyy}" : "-")</span>
+                    <span style="margin-left:1rem;"><b>Yaş:</b> @AgeYagText(bundle!.Ziyaret.BirthDate, bundle!.Ziyaret.Tarih)</span>
+                    <span style="margin-left:1rem;"><b>Cinsiyet:</b> @SexText</span>
+                </div>
+                <div style="margin-top:.5rem;">
+                    <button class="btn btn-success" @onclick="SaveVisitEdit">Kaydet</button>
+                    <button class="btn btn-secondary" style="margin-left:.5rem" @onclick="ToggleEditVisit">Vazgeç</button>
+                    <span style="color:#b00020;margin-left:.5rem;">@visitError</span>
+                </div>
+            </div>
+        }
+    </section>
+
+    <!-- ANTROPOMETRİ  -->
+    <section style="margin-bottom:1rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h5 style="margin:0;">Antropometri</h5>
+            @if (bundle?.Antropometri is not null)
+            {
+                <button class="btn btn-sm btn-outline-primary" @onclick="ToggleEditAnthro">
+                    @(editAnthro ? "İptal" : "Düzenle")
+                </button>
+            }
+        </div>
+
+        @if (bundle?.Antropometri is null)
+        {
+            <p style="color:#777;">Kayıt yok.</p>
+
+            <div style="border:1px solid #eee;border-radius:10px;padding:.75rem;margin-top:.75rem;">
+                <h6 style="margin:0 0 .5rem 0;">Antropometri Ekle</h6>
+
+                <div style="
+                     display:grid;
+                     grid-template-columns:repeat(4,1fr);
+                     gap:.75rem;
+                     align-items:end;">
+
+                    <label style="display:flex;flex-direction:column;">
+                        Boy (cm)
+                        <input type="number" step="0.01" @bind="antAdd.BoyCm" />
+                    </label>
+
+                    <label style="display:flex;flex-direction:column;">
+                        Kilo (kg)
+                        <input type="number" step="0.01" @bind="antAdd.KiloKg" />
+                    </label>
+
+                    <label style="display:flex;flex-direction:column;">
+                        Baş çev. (cm)
+                        <input type="number" step="0.01" @bind="antAdd.BasCevresiCm" />
+                    </label>
+
+                    <label style="display:flex;flex-direction:column;">
+                        Oturma boyu (cm)
+                        <input type="number" step="0.01" @bind="antAdd.OturmaBoyuCm" />
+                    </label>
+                </div>
+
+                <div style="margin-top:.5rem;">
+                    <button class="btn btn-primary" @onclick="SaveAnthro">Kaydet</button>
+                    <span style="color:#b00020;margin-left:.5rem;">@antError</span>
+                </div>
+            </div>
+        }
+
+        else
+        {
+            @if (!editAnthro)
+            {
+                <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.5rem;">
+                    <div><b>Boy (cm):</b> @bundle.Antropometri.BoyCm</div>
+                    <div><b>Kilo (kg):</b> @bundle.Antropometri.KiloKg</div>
+                    <div><b>BKI:</b> @bundle.Antropometri.BKI</div>
+                    <div><b>Baş çev. (cm):</b> @bundle.Antropometri.BasCevresiCm</div>
+                    <div><b>Boy SDS:</b> @bundle.Antropometri.BoySDS</div>
+                    <div><b>Kilo SDS:</b> @bundle.Antropometri.KiloSDS</div>
+                    <div><b>BKI SDS:</b> @bundle.Antropometri.BKISDS</div>
+                    <div><b>Baş çev. SDS:</b> @bundle.Antropometri.BasCevresiSDS</div>
+                </div>
+            }
+            else
+            {
+                <div style="border:1px solid #eee;border-radius:10px;padding:.75rem;">
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;">
+                        <label>Boy (cm)<input type="number" step="0.1" @bind="antEdit.BoyCm" /></label>
+                        <label>Kilo (kg)<input type="number" step="0.1" @bind="antEdit.KiloKg" /></label>
+                        <label>Baş çev. (cm)<input type="number" step="0.1" @bind="antEdit.BasCevresiCm" /></label>
+                        <label>Oturma boyu (cm)<input type="number" step="0.1" @bind="antEdit.OturmaBoyuCm" /></label>
+                    </div>
+                    <div style="margin-top:.5rem;">
+                        <button class="btn btn-success" @onclick="SaveAnthroEdit">Kaydet</button>
+                        <button class="btn btn-secondary" style="margin-left:.5rem;" @onclick="ToggleEditAnthro">Vazgeç</button>
+                        <span style="color:#b00020;margin-left:.5rem;">@antError</span>
+                    </div>
+                </div>
+            }
+
+        }
+    </section>
+
+    <!-- PUBERTE FİZİK -->
+    <section style="margin-bottom:1rem;border-top:1px solid #eee;padding-top:.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h5 style="margin:0;">Puberte Fizik</h5>
+            @if (bundle?.Puberte is not null)
+            {
+                <button class="btn btn-sm btn-outline-primary" @onclick="ToggleEditPub">
+                    @(editPub ? "İptal" : "Düzenle")
+                </button>
+            }
+        </div>
+
+        @if (bundle?.Puberte is null)
+        {
+            <p style="color:#777;">Kayıt yok.</p>
+            <div class="form-card">
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label class="form-label">Puberte Notu</label>
+                        <textarea class="input-textarea" rows="4"
+                                  @bind="pubCreate.PuberteNotu"
+                                  placeholder="Örn: Tanner evresi…"></textarea>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Patolojik Fizik</label>
+                        <textarea class="input-textarea" rows="4"
+                                  @bind="pubCreate.PatolojikFizik"
+                                  placeholder="Örn: asimetri…"></textarea>
+                    </div>
+                </div>
+                <button class="btn-primary" @onclick="SaveAddPub">Kaydet</button>
+                <span class="err">@pubError</span>
+            </div>
+        }
+        else
+        {
+            @if (!editPub)
+            {
+                <div class="read-card">
+                    <div><b>Puberte Notu:</b> @bundle.Puberte.PuberteNotu</div>
+                    <div><b>Patolojik Fizik:</b> @bundle.Puberte.PatolojikFizik</div>
+                </div>
+            }
+            else
+            {
+                <div class="form-card">
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label class="form-label">Puberte Notu</label>
+                            <textarea class="input-textarea" rows="4"
+                                      @bind="pubEdit.PuberteNotu"></textarea>
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label">Patolojik Fizik</label>
+                            <textarea class="input-textarea" rows="4"
+                                      @bind="pubEdit.PatolojikFizik"></textarea>
+                        </div>
+                    </div>
+
+                    <button class="btn-primary" @onclick="SaveEditPub">Kaydet</button>
+                    <button class="btn-secondary" style="margin-left:.5rem;" @onclick="ToggleEditPub">Vazgeç</button>
+                    <span class="err">@pubError</span>
+                </div>
+            }
+        }
+    </section>
+
+
+    <!-- YORUM / PLAN -->
+    <section style="margin-bottom:1rem;border-top:1px solid #eee;padding-top:.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h5 style="margin:0;">Yorum / Plan</h5>
+            @if (bundle?.YorumPlan is not null)
+            {
+                <button class="btn btn-sm btn-outline-primary" @onclick="ToggleEditYp">
+                    @(editYp ? "İptal" : "Düzenle")
+                </button>
+            }
+        </div>
+
+        @if (bundle?.YorumPlan is null)
+        {
+            <p style="color:#777;">Kayıt yok.</p>
+            <div class="form-card">
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label class="form-label">Tedavi/Beslenme/Spor</label>
+                        <textarea class="input-textarea" rows="4"
+                                  @bind="ypCreate.TedaviBeslenmeSpor"
+                                  placeholder="Tedavi, beslenme, egzersiz önerileri..."></textarea>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label">Notlar</label>
+                        <textarea class="input-textarea" rows="4"
+                                  @bind="ypCreate.YorumNotlar"
+                                  placeholder="Ek yorumlar veya açıklamalar..."></textarea>
+                    </div>
+                </div>
+                <button class="btn-primary" @onclick="SaveAddYp">Kaydet</button>
+                <span class="err">@ypError</span>
+            </div>
+        }
+        else
+        {
+            @if (!editYp)
+            {
+                <div class="read-card">
+                    <div><b>Tedavi/Beslenme/Spor:</b> @bundle.YorumPlan.TedaviBeslenmeSpor</div>
+                    <div><b>Notlar:</b> @bundle.YorumPlan.YorumNotlar</div>
+                    <div><b>Oluşturma:</b> @(bundle.YorumPlan.OlusturmaTarihi is { } yt ? $"{yt:dd.MM.yyyy HH:mm}" : "-")</div>
+                </div>
+            }
+            else
+            {
+                <div class="form-card">
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label class="form-label">Tedavi/Beslenme/Spor</label>
+                            <textarea class="input-textarea" rows="4"
+                                      @bind="ypEdit.TedaviBeslenmeSpor"></textarea>
+                        </div>
+                        <div class="form-field">
+                            <label class="form-label">Notlar</label>
+                            <textarea class="input-textarea" rows="4"
+                                      @bind="ypEdit.YorumNotlar"></textarea>
+                        </div>
+                    </div>
+
+                    <button class="btn-primary" @onclick="SaveEditYp">Kaydet</button>
+                    <button class="btn-secondary" style="margin-left:.5rem;" @onclick="ToggleEditYp">Vazgeç</button>
+                    <span class="err">@ypError</span>
+                </div>
+            }
+        }
+    </section>
+    <!--  KLİNİK ÖZET  -->
+    <section style="margin-bottom:1rem;border-top:1px solid #eee;padding-top:.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <h5 style="margin:0;">Klinik Özet</h5>
+            @if (bundle?.Ozet is not null)
+            {
+                <button class="btn btn-sm btn-outline-primary" @onclick="ToggleEditOzet">
+                    @(editOzet ? "İptal" : "Düzenle")
+                </button>
+            }
+        </div>
+
+        @if (bundle?.Ozet is null)
+        {
+            <p style="color:#777;">Kayıt yok.</p>
+
+            <div style="border:1px solid #eee;border-radius:10px;padding:.75rem;margin-top:.5rem;">
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;">
+                    <label>Kulaç (cm)<input type="number" step="0.1" @bind="ozetCreate.KulacCm" /></label>
+                    <label>Hedef Boy (cm)<input type="number" step="0.1" @bind="ozetCreate.HedefBoyCm" /></label>
+                    <label>Boy’a Uyan Tartı<input type="text" @bind="ozetCreate.BoyaUyanTarti" /></label>
+                </div>
+                <div style="margin-top:.5rem;">
+                    <button class="btn btn-primary" @onclick="SaveAddOzet">Kaydet</button>
+                    <span style="color:#b00020;margin-left:.5rem;">@ozetError</span>
+                </div>
+            </div>
+        }
+        else
+        {
+            @if (!editOzet)
+            {
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;">
+                    <div><b>Kulaç (cm):</b> @bundle.Ozet.KulacCm</div>
+                    <div><b>Hedef Boy (cm):</b> @bundle.Ozet.HedefBoyCm</div>
+                    <div><b>Boy’a Uyan Tartı:</b> @bundle.Ozet.BoyaUyanTarti</div>
+                </div>
+            }
+            else
+            {
+                <div style="border:1px solid #eee;border-radius:10px;padding:.75rem;">
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;">
+                        <label>Kulaç (cm)<input type="number" step="0.1" @bind="ozetEdit.KulacCm" /></label>
+                        <label>Hedef Boy (cm)<input type="number" step="0.1" @bind="ozetEdit.HedefBoyCm" /></label>
+                        <label>Boy’a Uyan Tartı<input type="text" @bind="ozetEdit.BoyaUyanTarti" /></label>
+                    </div>
+                    <div style="margin-top:.5rem;">
+                        <button class="btn btn-success" @onclick="SaveEditOzet">Kaydet</button>
+                        <button class="btn btn-secondary" style="margin-left:.5rem;" @onclick="ToggleEditOzet">Vazgeç</button>
+                        <span style="color:#b00020;margin-left:.5rem;">@ozetError</span>
+                    </div>
+                </div>
+            }
+        }
+    </section>
+
+    <section style="margin-bottom:1rem;border-top:1px solid #eee;padding-top:.5rem;">
+        <button class="btn btn-outline-primary" @onclick="() => OpenChartPopup(ziyaretId)">
+            Grafik Göster
+        </button>
+    </section>
+    <div>
+        <button class="btn btn-secondary"
+                @onclick="OpenLab">
+            Laboratuvar Sonuçları
+        </button>
+
+    </div>
+}
+@code {
+    [Parameter] public int ziyaretId { get; set; }
+
+    bool loading; string? error;
+    ZiyaretBundleDto? bundle;
+    List<AntropometriListDto> anthros = new();
+
+    AntropometriCreateDto antAdd = new();
+    AntropometriUpdateDto antEdit = new();
+    bool editAnthro; string? antError;
+
+    PuberteFizikCreateDto pubCreate = new();
+    PuberteFizikUpdateDto pubEdit = new();
+    bool editPub; string? pubError;
+
+    YorumPlanCreateDto ypCreate = new();
+    YorumPlanUpdateDto ypEdit = new();
+    bool editYp; string? ypError;
+
+    OzetHesapCreateDto ozetCreate = new();
+    OzetHesapUpdateDto ozetEdit = new();
+    bool editOzet; string? ozetError;
+
+    
+    ZiyaretUpdateDto visitEdit = new();
+    bool editVisit; string? visitError;
+
+    
+    char _sexChar = 'E';
+    string SexText => _sexChar == 'K' ? "Kadın" : "Erkek";
+
+    
+    string AgeYagText(DateTime? birth, DateTime? refDate)
+    {
+        if (birth is null || refDate is null) return "-";
+        var (y, a, g) = AgeYag(birth.Value, refDate.Value);
+        return $"{y} yıl {a} ay {g} gün";
+    }
+
+    static (int yil, int ay, int gun) AgeYag(DateTime birth, DateTime refDate)
+    {
+        if (refDate < birth) return (0, 0, 0);
+        int y = refDate.Year - birth.Year;
+        int a = refDate.Month - birth.Month;
+        int g = refDate.Day - birth.Day;
+        if (g < 0)
+        {
+            var prevMonth = refDate.AddMonths(-1);
+            g += DateTime.DaysInMonth(prevMonth.Year, prevMonth.Month);
+            a -= 1;
+        }
+        if (a < 0)
+        {
+            a += 12;
+            y -= 1;
+        }
+        return (y, a, g);
+    }
+
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadVisit();
+    }
+
+    void OpenCharts()
+    {
+        
+        Nav.NavigateTo($"/ziyaretler/{ziyaretId}/grafik");
+    }
+
+
+    async Task LoadVisit()
+    {
+        loading = true;
+        error = null;
+
+        try
+        {
+            
+            bundle = await Api.GetZiyaretBundleAsync(ziyaretId);
+
+            
+            if (bundle?.Antropometri is not null)
+            {
+                antEdit = new()
+                {
+                    BoyCm = bundle.Antropometri.BoyCm,
+                    KiloKg = bundle.Antropometri.KiloKg,
+                    BasCevresiCm = bundle.Antropometri.BasCevresiCm,
+                    OturmaBoyuCm = bundle.Antropometri.OturmaBoyuCm
+                };
+            }
+            else
+            {
+                antEdit = new(); 
+            }
+
+            if (bundle?.Puberte is not null)
+            {
+                pubEdit = new()
+                {
+                    PuberteNotu = bundle.Puberte.PuberteNotu,
+                    PatolojikFizik = bundle.Puberte.PatolojikFizik
+                };
+            }
+            else
+            {
+                pubEdit = new();
+            }
+
+            if (bundle?.YorumPlan is not null)
+            {
+                ypEdit = new()
+                {
+                    TedaviBeslenmeSpor = bundle.YorumPlan.TedaviBeslenmeSpor,
+                    YorumNotlar = bundle.YorumPlan.YorumNotlar
+                };
+            }
+            else
+            {
+                ypEdit = new();
+            }
+            if (bundle?.Ozet is not null)
+            {
+                ozetEdit = new()
+                {
+                    KulacCm = bundle.Ozet.KulacCm,
+                    HedefBoyCm = bundle.Ozet.HedefBoyCm,
+                    BoyaUyanTarti = bundle.Ozet.BoyaUyanTarti
+                };
+            }
+            else
+            {
+                ozetEdit = new();    
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            _sexChar = await GetSexAsync(); 
+            loading = false; ;
+        }
+    }
+
+
+    void ToggleEditAnthro() { antError = null; editAnthro = !editAnthro; }
+    async Task SaveAnthro()
+    {
+        try
+        {
+            antError = null;
+            
+            await Api.CreateAntropometriForVisitAsync(ziyaretId, antAdd);
+            antAdd = new();                    
+            await LoadVisit();                  
+        }
+        catch (Exception ex)
+        {
+            antError = ex.Message;
+            StateHasChanged();
+        }
+    }
+    async Task SaveAnthroEdit()
+    {
+        if (bundle?.Antropometri is null) { antError = "Antropometri kaydı bulunamadı."; return; }
+        try
+        {
+            antError = null;
+            await Api.UpdateAnthroAsync(bundle.Antropometri.AntropometriID, antEdit);
+            editAnthro = false;
+            await LoadVisit();
+        }
+        catch (Exception ex)
+        {
+            antError = ex.Message;
+            StateHasChanged();
+        }
+    }
+
+
+    void ToggleEditPub() { pubError = null; editPub = !editPub; }
+    async Task SaveAddPub()
+    {
+        try
+        {
+            pubError = null;
+            await Api.CreatePuberteAsync(ziyaretId, pubCreate);
+            pubCreate = new();
+            await LoadVisit();
+        }
+        catch (Exception ex)
+        {
+            pubError = ex.Message;
+            StateHasChanged();
+        }
+    }
+    async Task SaveEditPub()
+    {
+        if (bundle?.Puberte is null) { pubError = "Puberte kaydı bulunamadı."; return; }
+        try
+        {
+            pubError = null;
+            await Api.UpdatePuberteAsync(bundle.Puberte.PuberteID, pubEdit);
+            editPub = false;
+            await LoadVisit();
+        }
+        catch (Exception ex)
+        {
+            pubError = ex.Message;
+            StateHasChanged();
+        }
+    }
+
+
+    void ToggleEditYp() { ypError = null; editYp = !editYp; }
+    async Task SaveAddYp()
+    {
+        try
+        {
+            ypError = null;
+            await Api.CreateYorumPlanAsync(ziyaretId, ypCreate);
+            ypCreate = new();
+            await LoadVisit();
+        }
+        catch (Exception ex)
+        {
+            ypError = ex.Message;
+            StateHasChanged();
+        }
+    }
+    async Task SaveEditYp()
+    {
+        if (bundle?.YorumPlan is null) { ypError = "Yorum/Plan kaydı bulunamadı."; return; }
+        try
+        {
+            ypError = null;
+            await Api.UpdateYorumPlanAsync(bundle.YorumPlan.YorumID, ypEdit);
+            editYp = false;
+            await LoadVisit();
+        }
+        catch (Exception ex)
+        {
+            ypError = ex.Message;
+            StateHasChanged();
+        }
+    }
+
+
+    void Back()
+    {
+        if (bundle?.Ziyaret?.HastaID is int hid) Nav.NavigateTo($"/hastalar/{hid}");
+        else Nav.NavigateTo("/hastalar");
+    }
+
+    int? AgeInMonths(DateTime? birth, DateTime? refDate)
+    {
+        if (birth is null || refDate is null) return null;
+        var b = birth.Value; var r = refDate.Value;
+        var months = (r.Year - b.Year) * 12 + (r.Month - b.Month);
+        if (r.Day < b.Day) months--;
+        return months;
+    }
+
+    async Task<char> GetSexAsync()
+    {
+        var hid = bundle?.Ziyaret?.HastaID;
+        if (hid is null || hid <= 0) return 'E';
+        try
+        {
+            var hasta = await Api.GetPatientAsync(hid.Value);
+            return !string.IsNullOrWhiteSpace(hasta?.Cinsiyet) ? hasta.Cinsiyet![0] : 'E';
+        }
+        catch { return 'E'; }
+    }
+    void GeriHasta()
+    {
+        var hid = bundle?.Ziyaret?.HastaID;
+        if (hid.HasValue && hid.Value > 0)
+            Nav.NavigateTo($"/hastalar/{hid.Value}");
+        else
+            Nav.NavigateTo("/hastalar");
+    }
+    void ToggleEditOzet() { ozetError = null; editOzet = !editOzet; }
+
+    async Task SaveAddOzet()
+    {
+        try
+        {
+            ozetError = null;
+            var id = await Api.CreateOzetForVisitAsync(ziyaretId, ozetCreate);
+            ozetCreate = new();
+            await LoadVisit();
+        }
+        catch (Exception ex) { ozetError = ex.Message; }
+    }
+
+    async Task SaveEditOzet()
+    {
+        if (bundle?.Ozet is null) { ozetError = "Klinik özet kaydı bulunamadı."; return; }
+        try
+        {
+            ozetError = null;
+            await Api.UpdateOzetAsync(bundle.Ozet.OzetID, ozetEdit);
+            editOzet = false;
+            await LoadVisit();
+        }
+        catch (Exception ex) { ozetError = ex.Message; }
+    }
+    void ToggleEditVisit()
+    {
+        visitError = null;
+        editVisit = !editVisit;
+        if (editVisit && bundle?.Ziyaret is not null)
+        {
+            visitEdit = new ZiyaretUpdateDto
+            {
+                Tarih = bundle.Ziyaret.Tarih,
+                Notlar = bundle.Ziyaret.Notlar,
+                YakinmalarZiyaret = bundle.Ziyaret.YakinmalarZiyaret
+            };
+        }
+    }
+    async Task SaveVisitEdit()
+    {
+        if (bundle?.Ziyaret is null)
+        {
+            visitError = "Ziyaret bulunamadı.";
+            return;
+        }
+
+        try
+        {
+            visitError = null;
+           
+            await Api.UpdateVisitAsync(bundle.Ziyaret.ZiyaretID, visitEdit);
+            editVisit = false;
+            await LoadVisit(); 
+        }
+        catch (Exception ex)
+        {
+            visitError = ex.Message;
+            StateHasChanged();
+        }
+    }
+
+    async Task OpenChartPopup(int id)
+    {
+        var url = $"{Nav.BaseUri.TrimEnd('/')}/ziyaretler/{id}/grafik?popup=1";
+        var name = "ZiyaretGrafikPopup";
+        var features = "popup=yes,width=1100,height=800,scrollbars=yes,resizable=yes,left=120,top=80";
+
+        await JS.InvokeVoidAsync("open", url, name, features);
+    }
+    void OpenLab()
+    {
+        Nav.NavigateTo($"/ziyaretler/{ziyaretId}/lab?popup=1");
+    }
+
+
+}
+<style>
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center
+    }
+
+    .btn-blue {
+        background: #1976d2;
+        color: #fff;
+        border: none;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer
+    }
+
+        .btn-blue:hover {
+            background: #145da3
+        }
+
+    .form-card {
+        border: 1px solid #e9ecef;
+        border-radius: 12px;
+        padding: 12px;
+        background: #fff;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(12,minmax(0,1fr));
+        gap: .75rem;
+        align-items: start;
+        margin: .5rem 0 .75rem;
+    }
+
+    .form-field {
+        grid-column: span 6;
+    }
+    @@media (max-width: 992px) {
+        .form-field
+
+    {
+        grid-column: span 12;
+    }
+
+    }
+
+    .form-label {
+        display: block;
+        font-weight: 600;
+        color: #444;
+        margin-bottom: .25rem;
+    }
+
+    .input-text, .input-textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #cfd4dc;
+        border-radius: 8px;
+        background: #fff;
+        font-size: .95rem;
+        color: #1f2937;
+        transition: border-color .2s, box-shadow .2s;
+    }
+
+        .input-text:focus, .input-textarea:focus {
+            outline: none;
+            border-color: #1976d2;
+            box-shadow: 0 0 0 3px rgba(25,118,210,.15);
+        }
+
+    .input-textarea {
+        min-height: 96px;
+        resize: vertical;
+    }
+
+    .btn-primary {
+        background: #1976d2;
+        color: #fff;
+        border: none;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color .2s, transform .02s;
+    }
+
+        .btn-primary:hover {
+            background: #145da3;
+        }
+
+        .btn-primary:active {
+            transform: translateY(1px);
+        }
+</style>
+
+

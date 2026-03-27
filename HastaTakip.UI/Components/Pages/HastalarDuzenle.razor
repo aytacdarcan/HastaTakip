@@ -1,0 +1,99 @@
+﻿@page "/hastalar/duzenle/{id:int}"
+@using HastaTakip.UI.Dtos
+@inject HastaTakip.UI.Services.HastaApi Api
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+<h3>Hasta Düzenle</h3>
+
+@if (loading)
+{
+    <p>Yükleniyor…</p>
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <p style="color:#b00020">@error</p>
+}
+else
+{
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem;max-width:900px;">
+        <label>Ad<input @bind="model.Ad" /></label>
+        <label>Soyad<input @bind="model.Soyad" /></label>
+        <label>Doğum Tarihi<input type="date" @bind="model.BirthDate" /></label>
+
+        <label style="grid-column:span 3;">
+            Cinsiyet
+            <select @bind="model.Cinsiyet">
+                <option value="">Seçiniz</option>
+                <option value="E">Erkek</option>
+                <option value="K">Kadın</option>
+            </select>
+        </label>
+
+        <label>TCKN<input maxlength="11" @bind="model.TcKimlikNo" /></label>
+        <label>Telefon<input @bind="model.Telefon" /></label>
+        <label>E-posta<input type="email" @bind="model.Email" /></label>
+
+        <label style="grid-column:span 3;">Adres<textarea rows="2" @bind="model.Adres"></textarea></label>
+    </div>
+
+    <div style="margin-top:1rem;">
+        <button type="button" @onclick="Save">Kaydet</button>
+        <button type="button" style="margin-left:.5rem" @onclick="Cancel">Vazgeç</button>
+        @if (!string.IsNullOrWhiteSpace(saveError))
+        {
+            <span style="color:#b00020;margin-left:.5rem">@saveError</span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int id { get; set; }
+
+    bool loading = true;
+    string? error;
+    string? saveError;
+
+    
+    PatientUpdateDto model = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true; error = null; saveError = null;
+
+        try
+        {
+            
+            var d = await Api.GetPatientAsync(id);
+            if (d is null) { error = "Hasta bulunamadı."; return; }
+
+            model = new PatientUpdateDto
+            {
+                Ad = d.Ad,
+                Soyad = d.Soyad,
+                BirthDate = d.BirthDate,
+                Cinsiyet = d.Cinsiyet,     
+                TcKimlikNo = d.TcKimlikNo,
+                Telefon = d.Telefon,
+                Email = d.Email,
+                Adres = d.Adres
+            };
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { loading = false; }
+    }
+
+    async Task Save()
+    {
+        saveError = null;
+        try
+        {
+            await Api.UpdatePatientAsync(id, model);
+           
+            Nav.NavigateTo($"/hastalar/{id}");
+        }
+        catch (Exception ex) { saveError = ex.Message; }
+    }
+
+    void Cancel() => Nav.NavigateTo($"/hastalar/{id}");
+}

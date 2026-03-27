@@ -1,0 +1,1065 @@
+﻿@page "/hastalar/{id:int}"
+@using HastaTakip.UI.Dtos
+@inject HastaTakip.UI.Services.HastaApi Api
+@inject NavigationManager Nav
+@inject HttpClient Http
+@rendermode InteractiveServer
+
+
+<h3>Hasta Detay</h3>
+
+@if (loading)
+{
+    <p>Yükleniyor...</p> 
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+    <p style="color:red">@error</p>
+}
+else if (bundle is null)
+{
+    <p>Kayıt bulunamadı.</p>
+}
+else
+{
+    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+        <div style="flex:1;">
+
+            <div class="section-card patient-card">
+                <div class="section-header">
+                    <div class="patient-title">@bundle.Hasta.Ad @bundle.Hasta.Soyad</div>
+                    <div style="display:flex;gap:.5rem;align-items:center;">
+                        <button class="btn-blue" @onclick="Back">Geri</button>
+                        <button class="btn-blue" @onclick="Edit">Düzenle</button>
+                        <button class="btn-danger" @onclick="DeleteAll">Hasta Sil</button>
+                    </div>
+                </div>
+
+                <dl class="kv-grid">
+                    <div><dt>TCKN</dt><dd>@bundle.Hasta.TcKimlikNo</dd></div>
+                    <div><dt>Doğum Tarihi</dt><dd>@bundle.Hasta.BirthDate?.ToString("dd.MM.yyyy")</dd></div>
+                    <div><dt>Cinsiyet</dt><dd>@(bundle.Hasta.Cinsiyet == "E" ? "Erkek" : bundle.Hasta.Cinsiyet == "K" ? "Kadın" : "-")</dd></div>
+                    <div><dt>Telefon</dt><dd>@bundle.Hasta.Telefon</dd></div>
+                    <div><dt>E-posta</dt><dd>@bundle.Hasta.Email</dd></div>
+                    <div class="kv-span2"><dt>Adres</dt><dd>@bundle.Hasta.Adres</dd></div>
+                </dl>
+            </div>
+
+
+            <section class="section-card">
+                <div class="section-header">
+                    <h5>Aile Üyeleri</h5>
+                    <button type="button" class="btn-green" @onclick="ToggleAddAile">
+                        @((addingAile) ? "Vazgeç" : "Yeni Aile Üyesi")
+                    </button>
+
+                </div>
+                @if (addingAile)
+                {
+                    <div class="form-grid mt-2">
+                        <label>İlişki<input class="input-text" @bind="aileAdd.Iliski" placeholder="Anne/Baba/Kardeş..." /></label>
+                        <label>Ad<input class="input-text" @bind="aileAdd.Ad" /></label>
+                        <label>Doğum<input class="input-text" type="date" @bind="aileAdd.DogumTarihi" /></label>
+                        <label>Boy (cm)<input class="input-text" type="number" step="0.1" @bind="aileAdd.BoyCm" /></label>
+                        <label>Kilo (kg)<input class="input-text" type="number" step="0.1" @bind="aileAdd.AgirlikKg" /></label>
+                        <label>Puberte Yaşı (yıl)<input class="input-text" type="number" step="1" min="0" max="25" @bind="aileAdd.PuberteYasiYil" /></label>
+                        <label class="col-span-3">Sağlık Durumu<input class="input-text" @bind="aileAdd.SaglikDurumu" /></label>
+                        <label class="col-span-3">Meslek<input class="input-text" @bind="aileAdd.Meslek" /></label>
+                    </div>
+                    <div class="row-actions">
+                        <button type="button" class="btn-primary" @onclick="SaveAddAile" disabled="@string.IsNullOrWhiteSpace(aileAdd.Iliski)">Ekle</button>
+                        <span class="err">@aileError</span>
+                    </div>
+                }
+
+
+                @if (bundle.AileUyeleri.Count == 0)
+                {
+                    <p style="color:#777; margin-top:.5rem;">Kayıt bulunamadı.</p>
+                }
+                else
+                {
+                    @foreach (var a in bundle.AileUyeleri)
+                    {
+                        var isEdit = aileEdits.ContainsKey(a.AileUyesiID);
+
+                        <div style="border:1px solid #eee; border-radius:10px; padding:8px; margin-top:.5rem;">
+                            @if (!isEdit)
+                            {
+                                <div class="read-card">
+                                    <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:center;">
+                                        <div>
+                                            <b>@a.Iliski?.ToUpper()</b> — @Dash(a.Ad)
+                                            (@(a.DogumTarihi.HasValue? a.DogumTarihi.Value.ToString("dd.MM.yyyy") : "-"))
+                                        </div>
+                                        <div>
+                                            <button type="button" class="btn-blue" @onclick="() => StartEditAile(a)">Düzenle</button>
+                                            <button type="button" class="btn-danger" style="margin-left:.5rem" @onclick="() => DeleteAile(a.AileUyesiID)">Sil</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="pill-row">
+                                        <span class="badge">Boy: @(a.BoyCm?.ToString("0.#") ?? "-") cm</span>
+                                        <span class="badge">Kilo: @(a.AgirlikKg?.ToString("0.#") ?? "-") kg</span>
+                                        <span class="badge">Sağlık: @Dash(a.SaglikDurumu)</span>
+                                        <span class="badge">Meslek: @Dash(a.Meslek)</span>
+                                    </div>
+                                </div>
+                            }
+
+                            else
+                            {
+                                <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:.5rem;align-items:end;">
+                                    <label>İlişki<input @bind="aileEdits[a.AileUyesiID].Iliski" /></label>
+                                    <label>Ad<input @bind="aileEdits[a.AileUyesiID].Ad" /></label>
+                                    <label>Doğum<input type="date" @bind="aileEdits[a.AileUyesiID].DogumTarihi" /></label>
+                                    <label>Boy (cm)<input type="number" step="0.1" @bind="aileEdits[a.AileUyesiID].BoyCm" /></label>
+                                    <label>Kilo (kg)<input type="number" step="0.1" @bind="aileEdits[a.AileUyesiID].AgirlikKg" /></label>
+                                    <input type="number" step="1" min="0" max="25" @bind="aileEdits[a.AileUyesiID].PuberteYasiYil" />
+                                    <label style="grid-column:span 3;">Sağlık Durumu<input @bind="aileEdits[a.AileUyesiID].SaglikDurumu" /></label>
+                                    <label style="grid-column:span 3;">Meslek<input @bind="aileEdits[a.AileUyesiID].Meslek" /></label>
+                                </div>
+                                <div style="margin-top:.5rem;">
+                                    <button type="button" @onclick="() => SaveEditAile(a.AileUyesiID)">Kaydet</button>
+                                    <button type="button" style="margin-left:.5rem" @onclick="() => CancelEditAile(a.AileUyesiID)">İptal</button>
+                                    <span style="color:#b00020;margin-left:.5rem">@aileError</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </section>
+
+            <section class="section-card">
+                <div class="section-header">
+                    <h5>Öykü</h5>
+                    @if (bundle.Oykuler is null)
+                    {
+                        <button type="button" class="btn-green" @onclick="StartAddOyku">Öykü Ekle</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn-blue" @onclick="ToggleEditOyku">@(editOyku ? "İptal" : "Düzenle")</button>
+                    }
+
+                </div>
+
+                @if (bundle.Oykuler is null)
+                {
+                    @if (addOyku)
+                    {
+                        <div class="form-grid mt-2">
+                            <label class="col-span-2">
+                                Yakınmalar
+                                <textarea class="input-textarea" rows="2" @bind="oykuCreate.Yakinmalar"></textarea>
+                            </label>
+                            <label class="col-span-2">
+                                Öyküsü
+                                <textarea class="input-textarea" rows="2" @bind="oykuCreate.Oykusu"></textarea>
+                            </label>
+                            <label>Gebelik Öyküsü<input class="input-text" @bind="oykuCreate.GebelikOykusu" /></label>
+                            <label>Doğum Şekli<input class="input-text" @bind="oykuCreate.DogumSekli" /></label>
+                            <label>Doğum Ağırlığı<input class="input-text" @bind="oykuCreate.DogumAgirlik" placeholder="örn: 3200 gr" /></label>
+                            <label>Doğum Boyu<input class="input-text" @bind="oykuCreate.DogumBoyu" placeholder="örn: 50 cm" /></label>
+                            <label>Neonatal Dönem<input class="input-text" @bind="oykuCreate.NeonatalDonem" /></label>
+                            <label>Nör. Gelişim<input class="input-text" @bind="oykuCreate.NorGelisim" /></label>
+                            <label>Süt/Çocuk Beslenme<input class="input-text" @bind="oykuCreate.SutcocukBeslenme" /></label>
+                            <label>Geçirilen Hastalıklar<input class="input-text" @bind="oykuCreate.GecirilenHast" /></label>
+                            <label>Operasyon/Kaza<input class="input-text" @bind="oykuCreate.OperasyonKaza" /></label>
+                            <label>Kardeş Sağlığı<input class="input-text" @bind="oykuCreate.KardesSagligi" /></label>
+                            <label>Aile Hastalıkları<input class="input-text" @bind="oykuCreate.AileHastaliklar" /></label>
+                            <label class="col-span-2">
+                                Kan Akrabalığı
+                                <input class="input-text" @bind="oykuCreate.KanAkrabaligi"
+                                       placeholder="örn: Yok / 1. derece kuzen evliliği" />
+                            </label>
+                            <label class="col-span-2">
+                                Oluşturma Tarihi
+                                <input class="input-text" type="datetime-local" @bind="oykuCreate.OlusturmaTarihi" />
+                            </label>
+                        </div>
+                        <div class="row-actions">
+                            <button class="btn-primary" @onclick="SaveAddOyku">Kaydet</button>
+                            <button class="btn-secondary" @onclick="() => addOyku = false">Vazgeç</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <p style="color:#777;">Kayıt bulunamadı.</p>
+                    }
+                }
+                else
+                {
+                    @if (!editOyku)
+                    {
+                        <div class="read-card mt-2">
+                            <div><b>Yakınmalar:</b> @Dash(bundle.Oykuler.Yakinmalar)</div>
+                            <div><b>Öyküsü:</b> @Dash(bundle.Oykuler.Oykusu)</div>
+                            <div><b>Gebelik Öyküsü:</b> @Dash(bundle.Oykuler.GebelikOykusu)</div>
+                            <div><b>Doğum Şekli:</b> @Dash(bundle.Oykuler.DogumSekli)</div>
+
+                            <div><b>Doğum Ağırlığı:</b> @Dash(bundle.Oykuler.DogumAgirlik)</div>
+                            <div><b>Doğum Boyu:</b> @Dash(bundle.Oykuler.DogumBoyu)</div>
+
+                            <div><b>Neonatal Dönem:</b> @Dash(bundle.Oykuler.NeonatalDonem)</div>
+                            <div><b>Nör. Gelişim:</b> @Dash(bundle.Oykuler.NorGelisim)</div>
+                            <div><b>Süt/Çocuk Beslenme:</b> @Dash(bundle.Oykuler.SutcocukBeslenme)</div>
+                            <div><b>Geçirilen Hastalıklar:</b> @Dash(bundle.Oykuler.GecirilenHast)</div>
+                            <div><b>Operasyon/Kaza:</b> @Dash(bundle.Oykuler.OperasyonKaza)</div>
+
+                            <div><b>Kan Akrabalığı:</b> @Dash(bundle.Oykuler.KanAkrabaligi)</div>
+                            <div><b>Kardeş Sağlığı:</b> @Dash(bundle.Oykuler.KardesSagligi)</div>
+                            <div><b>Aile Hastalıkları:</b> @Dash(bundle.Oykuler.AileHastaliklar)</div>
+
+                            <div><b>Oluşturma:</b> @($"{bundle.Oykuler.OlusturmaTarihi:dd.MM.yyyy HH:mm}")</div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="form-grid mt-2">
+                            <label class="col-span-2">
+                                Yakınmalar
+                                <textarea class="input-textarea" rows="2" @bind="oykuEdit.Yakinmalar"></textarea>
+                            </label>
+
+                            <label class="col-span-2">
+                                Öyküsü
+                                <textarea class="input-textarea" rows="2" @bind="oykuEdit.Oykusu"></textarea>
+                            </label>
+
+                            <label>Gebelik Öyküsü<input class="input-text" @bind="oykuEdit.GebelikOykusu" /></label>
+                            <label>Doğum Şekli<input class="input-text" @bind="oykuEdit.DogumSekli" /></label>
+
+                            <label>Doğum Ağırlığı<input class="input-text" @bind="oykuEdit.DogumAgirlik" placeholder="örn: 3200 gr" /></label>
+                            <label>Doğum Boyu<input class="input-text" @bind="oykuEdit.DogumBoyu" placeholder="örn: 50 cm" /></label>
+
+                            <label>Neonatal Dönem<input class="input-text" @bind="oykuEdit.NeonatalDonem" /></label>
+                            <label>Nör. Gelişim<input class="input-text" @bind="oykuEdit.NorGelisim" /></label>
+                            <label>Süt/Çocuk Beslenme<input class="input-text" @bind="oykuEdit.SutcocukBeslenme" /></label>
+                            <label>Geçirilen Hastalıklar<input class="input-text" @bind="oykuEdit.GecirilenHast" /></label>
+                            <label>Operasyon/Kaza<input class="input-text" @bind="oykuEdit.OperasyonKaza" /></label>
+
+                            <label class="col-span-2">
+                                Kan Akrabalığı
+                                <input class="input-text"
+                                       @bind="oykuEdit.KanAkrabaligi"
+                                       placeholder="örn: Yok / 1. derece kuzen evliliği" />
+                            </label>
+
+                            <label>Kardeş Sağlığı<input class="input-text" @bind="oykuEdit.KardesSagligi" /></label>
+                            <label>Aile Hastalıkları<input class="input-text" @bind="oykuEdit.AileHastaliklar" /></label>
+
+                            <label class="col-span-2">
+                                Oluşturma Tarihi
+                                <input class="input-text" type="datetime-local" @bind="oykuEdit.OlusturmaTarihi" />
+                            </label>
+                        </div>
+
+                        <div class="row-actions">
+                            <button class="btn-primary" @onclick="SaveEditOyku">Kaydet</button>
+                            <button class="btn-secondary" @onclick="ToggleEditOyku">İptal</button>
+                            @if (!string.IsNullOrWhiteSpace(localError))
+                            {
+                                <span class="err">@localError</span>
+                            }
+                        </div>
+                    }
+                }
+            </section>
+
+            <section class="section-card">
+                <div class="section-header">
+                    <h5>Beslenme / Alışkanlıklar (Son 10)</h5>
+                    <button type="button" class="btn-green" @onclick="ToggleAddDiyet">
+                        @((addingDiyet) ? "Vazgeç" : "Yeni Kayıt Ekle")
+                    </button>
+                </div>
+
+                @if (addingDiyet)
+                {
+                    <div class="form-grid mt-2">
+                        <label>Tarih<input class="input-text" type="date" @bind="diyetAdd.Tarih" /></label>
+                        <label>Ekmek<input class="input-text" @bind="diyetAdd.Ekmek" /></label>
+                        <label>Tahıl<input class="input-text" @bind="diyetAdd.Tahil" /></label>
+                        <label>Et<input class="input-text" @bind="diyetAdd.Et" /></label>
+                        <label>Peynir<input class="input-text" @bind="diyetAdd.Peynir" /></label>
+                        <label>Süt<input class="input-text" @bind="diyetAdd.Sut" /></label>
+
+                        <label>Yoğurt<input class="input-text" @bind="diyetAdd.Yogurt" /></label>
+                        <label>Meyve<input class="input-text" @bind="diyetAdd.Meyve" /></label>
+                        <label>Sebze<input class="input-text" @bind="diyetAdd.Sebze" /></label>
+                        <label>Şekerli İçecek<input class="input-text" @bind="diyetAdd.SiviGida" /></label>
+                        <label>Abur Cubur<input class="input-text" @bind="diyetAdd.AburCubur" /></label>
+                        <label>Ekran Süresi<input class="input-text" @bind="diyetAdd.EkranSuresi" /></label>
+                    </div>
+                    <div class="row-actions">
+                        <button class="btn-primary" @onclick="SaveAddDiyet" disabled="@(diyetAdd.Tarih == default)">Kaydet</button>
+                        <span class="err">@localError</span>
+                    </div>
+                }
+
+                @if (bundle.Diyetler.Count == 0)
+                {
+                    <p style="color:#777;">Kayıt bulunamadı.</p>
+                }
+                else
+                {
+                    @foreach (var d in bundle.Diyetler)
+                    {
+                        var edit = diyetEdits.ContainsKey(d.DiyetID);
+
+                        <div class="read-card">
+                            @if (!edit)
+                            {
+                                <div class="read-card">
+                                    <div style="display:flex;justify-content:space-between;gap:.75rem;align-items:center;">
+                                        <b>@d.Tarih.ToString("dd.MM.yyyy")</b>
+                                        <div>
+                                            <button class="btn-blue" @onclick="() => StartEditDiyet(d)">Düzenle</button>
+                                            <button class="btn-danger" style="margin-left:.5rem" @onclick="() => DeleteDiyet(d.DiyetID)">Sil</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="pill-row">
+                                        <span class="badge">Ekmek: @Dash(d.Ekmek)</span>
+                                        <span class="badge">Tahıl: @Dash(d.Tahil)</span>
+                                        <span class="badge">Et: @Dash(d.Et)</span>
+                                        <span class="badge">Peynir: @Dash(d.Peynir)</span>
+                                        <span class="badge">Süt: @Dash(d.Sut)</span>
+                                        <span class="badge">Yoğurt: @Dash(d.Yogurt)</span>
+                                        <span class="badge">Meyve: @Dash(d.Meyve)</span>
+                                        <span class="badge">Sebze: @Dash(d.Sebze)</span>
+                                        <span class="badge">Şekerli İçecek: @Dash(d.SiviGida)</span>
+                                        <span class="badge">Abur Cubur: @Dash(d.AburCubur)</span>
+                                        <span class="badge">Ekran Süresi: @Dash(d.EkranSuresi)</span>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="form-grid mt-2">
+                                    <label>Tarih<input class="input-text" type="date" @bind="diyetEdits[d.DiyetID].Tarih" /></label>
+                                    <label>Ekmek<input class="input-text" @bind="diyetEdits[d.DiyetID].Ekmek" /></label>
+                                    <label>Tahıl<input class="input-text" @bind="diyetEdits[d.DiyetID].Tahil" /></label>
+                                    <label>Et<input class="input-text" @bind="diyetEdits[d.DiyetID].Et" /></label>
+                                    <label>Peynir<input class="input-text" @bind="diyetEdits[d.DiyetID].Peynir" /></label>
+                                    <label>Süt<input class="input-text" @bind="diyetEdits[d.DiyetID].Sut" /></label>
+
+                                    <label>Yoğurt<input class="input-text" @bind="diyetEdits[d.DiyetID].Yogurt" /></label>
+                                    <label>Meyve<input class="input-text" @bind="diyetEdits[d.DiyetID].Meyve" /></label>
+                                    <label>Sebze<input class="input-text" @bind="diyetEdits[d.DiyetID].Sebze" /></label>
+                                    <label>Şekerli İçecek<input class="input-text" @bind="diyetEdits[d.DiyetID].SiviGida" /></label>
+                                    <label>Abur Cubur<input class="input-text" @bind="diyetEdits[d.DiyetID].AburCubur" /></label>
+                                    <label>Ekran Süresi<input class="input-text" @bind="diyetEdits[d.DiyetID].EkranSuresi" /></label>
+                                </div>
+                                <div class="row-actions">
+                                    <button class="btn-primary" @onclick="() => SaveEditDiyet(d.DiyetID)">Kaydet</button>
+                                    <button class="btn-secondary" @onclick="() => CancelEditDiyet(d.DiyetID)">İptal</button>
+                                    @if (!string.IsNullOrWhiteSpace(localError))
+                                    {
+                                        <span class="err">@localError</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </section>
+
+            <section class="section-card">
+                <div class="section-header">
+                    <h5>Ziyaretler</h5>
+                    <button class="btn-green" @onclick="YeniZiyaret">Yeni Ziyaret</button>
+                </div>
+
+                @if (visits is null)
+                {
+                    <p>Yükleniyor…</p>
+                }
+                else if (visits.Items.Count == 0)
+                {
+                    <p style="color:#777;">Kayıt yok.</p>
+                }
+                else
+                {
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Tarih</th>
+                                <th>Notlar</th>
+                                <th style="width:1%"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var v in visits.Items)
+                            {
+                                <tr>
+                                    <td>@(v.Tarih is { } vt ? $"{vt:dd.MM.yyyy}" : "-")</td>
+                                    <td>@v.Notlar</td>
+                                    <td class="text-right">
+                                        <button class="btn-blue" @onclick="() => OpenVisit(v)">Detay</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+
+                    <div class="pager">
+                        <button class="btn-blue" disabled="@(currentPage <= 1)" @onclick="PrevPage">Önceki</button>
+                        <span>Sayfa @currentPage</span>
+                        <button class="btn-blue" disabled="@(visits.Items.Count < pageSize)" @onclick="NextPage">Sonraki</button>
+                    </div>
+                }
+            </section>
+
+
+           
+            <section style="border:1px solid #eee; border-radius:12px; padding:12px; margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:.5rem;">
+                    <h5 style="margin:0">Büyüme Grafiği</h5>
+                    <select @bind="measure" class="form-select" style="max-width:220px;">
+                        <option value="BoyCm">Boy (cm)</option>
+                        <option value="KiloKg">Kilo (kg)</option>
+                        <option value="BasCevresiCm">Baş çevresi (cm)</option>
+                        <option value="BKI">BKI</option>
+                    </select>
+                    <button class="btn btn-primary" @onclick="LoadGrowth">Grafiği Göster</button>
+                </div>
+
+                <div class="mt-3">
+                    <canvas id="grChart" width="900" height="360"></canvas>
+                </div>
+                
+            </section>
+            
+        </div>
+    </div>
+}
+@code {
+    [Parameter] public int id { get; set; }
+
+    bool loading;
+    string? error;
+    PatientBundleDto? bundle;
+
+    
+    string measure = "KiloKg"; 
+
+    
+    bool addingAile = false;
+    AileUyesiCreateDto aileAdd = new();               
+    Dictionary<int, AileUyesiUpdateDto> aileEdits = new(); 
+    string? aileError;
+
+    
+    bool editOyku = false;
+    bool addOyku = false;
+    OykulerUpdateDto oykuEdit = new();
+    OykulerCreateDto oykuCreate = new() { HastaID = 0 }; 
+
+   
+    Dictionary<int, DiyetUpdateDto> diyetEdits = new();
+    string? localError;
+    PagedResult<ZiyaretDetayDto>? visits;
+    int currentPage = 1, pageSize = 10;
+
+    async Task LoadVisits() =>
+    visits = await Api.GetPatientVisitsDetailAsync(id, currentPage, pageSize);
+
+    void PrevPage() { if (currentPage > 1) { currentPage--; _ = LoadVisits(); } }
+    void NextPage() { if (visits?.Items?.Count == pageSize) { currentPage++; _ = LoadVisits(); } }
+
+    void YeniZiyaret() => Nav.NavigateTo($"/ziyaretler/yeni/{id}");
+
+
+    void OpenVisit(ZiyaretDetayDto v)
+    {
+        var t = v.Tarih is { } vt ? Uri.EscapeDataString($"{vt:yyyy-MM-dd}") : "";
+        var n = Uri.EscapeDataString(v.Notlar ?? "");
+        Nav.NavigateTo($"/ziyaretler/{v.ZiyaretID}?t={t}&n={n}");
+    }
+
+    async Task LoadGrowth()
+    {
+        try
+        {
+            var list = await Api.GetAnthroByHastaAsync(id);
+
+            IEnumerable<object> points = measure switch
+            {
+                "BoyCm" => list.Where(x => x.YasAy.HasValue && x.BoyCm.HasValue)
+                                      .Select(x => new { ageMonths = x.YasAy!.Value, value = x.BoyCm!.Value }),
+                "KiloKg" => list.Where(x => x.YasAy.HasValue && x.KiloKg.HasValue)
+                                      .Select(x => new { ageMonths = x.YasAy!.Value, value = x.KiloKg!.Value }),
+                "BasCevresiCm" => list.Where(x => x.YasAy.HasValue && x.BasCevresiCm.HasValue)
+                                      .Select(x => new { ageMonths = x.YasAy!.Value, value = x.BasCevresiCm!.Value }),
+                "BKI" => list.Where(x => x.YasAy.HasValue && x.BKI.HasValue)
+                                      .Select(x => new { ageMonths = x.YasAy!.Value, value = x.BKI!.Value }),
+                _ => Enumerable.Empty<object>()
+            };
+
+            string label = measure switch
+            {
+                "BoyCm" => "Boy (cm)",
+                "KiloKg" => "Kilo (kg)",
+                "BasCevresiCm" => "Baş çevresi (cm)",
+                "BKI" => "BKI",
+                _ => measure
+            };
+
+            await JS.InvokeVoidAsync("growthChart.render", "grChart", new
+            {
+                measure = label,
+                refs = Array.Empty<object>(),
+                points = points.ToList()
+            });
+        }
+        catch (Exception ex)
+        {
+            await JS.InvokeVoidAsync("alert", $"Grafik yüklenemedi: {ex.Message}");
+        }
+    }
+
+
+
+
+
+    void ToggleEditOyku()
+    {
+        localError = null;
+        if (bundle?.Oykuler is null) return;
+
+        editOyku = !editOyku;
+
+        if (editOyku)
+        {
+            var o = bundle.Oykuler;
+
+            oykuEdit = new OykulerUpdateDto
+            {
+                Yakinmalar = o.Yakinmalar,
+                Oykusu = o.Oykusu,
+                GebelikOykusu = o.GebelikOykusu,
+                DogumSekli = o.DogumSekli,
+
+                DogumAgirlik = o.DogumAgirlik,
+                DogumBoyu = o.DogumBoyu,
+
+                NeonatalDonem = o.NeonatalDonem,
+                NorGelisim = o.NorGelisim,
+                SutcocukBeslenme = o.SutcocukBeslenme,
+                GecirilenHast = o.GecirilenHast,
+                OperasyonKaza = o.OperasyonKaza,
+
+                KanAkrabaligi = o.KanAkrabaligi,
+                KardesSagligi = o.KardesSagligi,
+                AileHastaliklar = o.AileHastaliklar,
+
+                OlusturmaTarihi = o.OlusturmaTarihi
+            };
+        }
+    }
+
+    void StartAddOyku()
+    {
+        addOyku = true;
+        localError = null;
+        oykuCreate = new OykulerCreateDto
+        {
+            HastaID = bundle?.Hasta.Id ?? id,
+            OlusturmaTarihi = DateTime.Now
+        };
+    }
+
+    async Task SaveEditOyku()
+    {
+        if (bundle?.Oykuler is null) return;
+        try
+        {
+            await Api.UpdateOykuAsync(bundle.Oykuler.OykulerID, oykuEdit);
+            bundle = await Api.GetPatientBundleAsync(id);
+            editOyku = false;
+            localError = null;
+            StateHasChanged();
+        }
+        catch (Exception ex) { localError = ex.Message; }
+    }
+
+    async Task SaveAddOyku()
+    {
+        try
+        {
+            oykuCreate.HastaID = bundle?.Hasta.Id ?? id;
+            var newId = await Api.CreateOykuAsync(oykuCreate);
+            bundle = await Api.GetPatientBundleAsync(id);
+            addOyku = false;
+            localError = null;
+        }
+        catch (Exception ex) { localError = ex.Message; }
+    }
+
+    bool addingDiyet = false;
+    DiyetCreateDto diyetAdd = new() { Tarih = DateTime.Today };
+
+    void ToggleAddDiyet()
+    {
+        addingDiyet = !addingDiyet;
+        localError = null;
+        if (addingDiyet)
+            diyetAdd = new DiyetCreateDto { Tarih = DateTime.Today };
+    }
+
+    async Task SaveAddDiyet()
+    {
+        try
+        {
+            if (diyetAdd.Tarih == default)
+            {
+                localError = "Tarih zorunludur.";
+                return;
+            }
+
+            diyetAdd.HastaID = bundle?.Hasta.Id ?? id;
+            await Api.CreateDiyetAsync(diyetAdd);
+            bundle = await Api.GetPatientBundleAsync(id);
+            addingDiyet = false;
+            localError = null;
+            StateHasChanged();
+        }
+        catch (Exception ex) { localError = ex.Message; }
+    }
+
+    void StartEditDiyet(DiyetListDto d)
+    {
+        localError = null;
+        if (!diyetEdits.ContainsKey(d.DiyetID))
+        {
+            diyetEdits[d.DiyetID] = new DiyetUpdateDto
+            {
+                Tarih = d.Tarih,
+                Ekmek = d.Ekmek,
+                Tahil = d.Tahil,
+
+                Et = d.Et,
+                Peynir = d.Peynir,
+
+                Sut = d.Sut,
+                Yogurt = d.Yogurt,
+
+                Meyve = d.Meyve,
+                Sebze = d.Sebze,
+
+                SiviGida = d.SiviGida,
+                AburCubur = d.AburCubur,
+                EkranSuresi = d.EkranSuresi
+            };
+        }
+    }
+
+    void CancelEditDiyet(int diyetId)
+    {
+        diyetEdits.Remove(diyetId);
+        localError = null;
+    }
+
+    async Task SaveEditDiyet(int diyetId)
+    {
+        if (!diyetEdits.TryGetValue(diyetId, out var dto)) return;
+        try
+        {
+            await Api.UpdateDiyetAsync(diyetId, dto);
+            diyetEdits.Remove(diyetId);
+            bundle = await Api.GetPatientBundleAsync(id);
+            localError = null;
+            StateHasChanged();
+        }
+        catch (Exception ex) { localError = ex.Message; }
+    }
+
+    async Task DeleteDiyet(int diyetId)
+    {
+        if (!await ConfirmAsync("Bu diyet kaydını silmek istediğinize emin misiniz?")) return;
+        try
+        {
+            await Api.DeleteDiyetAsync(diyetId);
+            bundle = await Api.GetPatientBundleAsync(id);
+            StateHasChanged();
+        }
+        catch (Exception ex) { localError = ex.Message; }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        error = null;
+
+        try
+        {
+            bundle = await Api.GetPatientBundleAsync(id);
+
+            if (bundle is null)
+            {
+                error = "Hasta kaydı bulunamadı.";
+            }
+            else
+            {
+               
+                await LoadVisits();
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+        }
+
+        loading = false;
+    }
+
+
+    void Back() => Nav.NavigateTo("/hastalar");
+    void Edit() => Nav.NavigateTo($"/hastalar/duzenle/{id}");
+
+    async Task<bool> ConfirmAsync(string msg)
+    {
+        return await JS.InvokeAsync<bool>("confirm", msg);
+    }
+
+    [Inject] IJSRuntime JS { get; set; } = default!;
+    string Dash(string? s) => string.IsNullOrWhiteSpace(s) ? "-" : s;
+
+    void ToggleAddAile()
+    {
+        addingAile = !addingAile;
+        aileError = null;
+        if (addingAile)
+        {
+            aileAdd = new AileUyesiCreateDto
+            {
+                HastaID = bundle?.Hasta.Id ?? id
+            };
+        }
+    }
+
+    async Task SaveAddAile()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(aileAdd.Iliski))
+            {
+                aileError = "İlişki zorunludur.";
+                return;
+            }
+
+            await Api.CreateAileUyesiAsync(aileAdd);
+            bundle = await Api.GetPatientBundleAsync(id);
+            addingAile = false;
+            aileError = null;
+            StateHasChanged();
+        }
+        catch (Exception ex) { aileError = ex.Message; }
+    }
+
+    void StartEditAile(AileUyesiListDto a)
+    {
+        aileError = null;
+        if (!aileEdits.ContainsKey(a.AileUyesiID))
+        {
+            aileEdits[a.AileUyesiID] = new AileUyesiUpdateDto
+            {
+                Iliski = a.Iliski,
+                Ad = a.Ad,
+                DogumTarihi = a.DogumTarihi,
+                BoyCm = a.BoyCm,
+                AgirlikKg = a.AgirlikKg,
+                PuberteYasiYil = a.PuberteYasiYil.HasValue ? (int?)Math.Round(a.PuberteYasiYil.Value) : null,
+                SaglikDurumu = a.SaglikDurumu,
+                Meslek = a.Meslek
+            };
+        }
+    }
+
+    void CancelEditAile(int aileUyesiId)
+    {
+        aileEdits.Remove(aileUyesiId);
+        aileError = null;
+    }
+
+    async Task SaveEditAile(int aileUyesiId)
+    {
+        if (!aileEdits.TryGetValue(aileUyesiId, out var dto)) return;
+        try
+        {
+            await Api.UpdateAileUyesiAsync(aileUyesiId, dto);
+            aileEdits.Remove(aileUyesiId);
+            bundle = await Api.GetPatientBundleAsync(id);
+            aileError = null;
+            StateHasChanged();
+        }
+        catch (Exception ex) { aileError = ex.Message; }
+    }
+
+    async Task DeleteAile(int aileUyesiId)
+    {
+        if (!await ConfirmAsync("Bu aile üyesini silmek istediğinize emin misiniz?")) return;
+        try
+        {
+            await Api.DeleteAileUyesiAsync(aileUyesiId);
+            bundle = await Api.GetPatientBundleAsync(id);
+            StateHasChanged();
+        }
+        catch (Exception ex) { aileError = ex.Message; }
+    }
+    async Task DeleteAll()
+    {
+        if (!await ConfirmAsync("Bu hastaya ait TÜM veriler (ziyaretler, öykü, diyetler vb.) kalıcı olarak silinecek. Emin misiniz?"))
+            return;
+
+        try
+        {
+            await Api.DeletePatientCascadeAsync(id);
+            Nav.NavigateTo("/hastalar");
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            StateHasChanged();
+        }
+    }
+    
+
+
+}
+<style>
+    .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        margin-top: .5rem
+    }
+
+    .badge {
+        display: inline-block;
+        background: #f1f3f5;
+        border: 1px solid #e5e7eb;
+        border-radius: 999px;
+        padding: .25rem .6rem;
+        font-size: .9rem;
+        color: #111
+    }
+
+    /* Başlıklar / hasta adı */
+    .patient-title {
+        font-weight: 700;
+        font-size: 1.25rem;
+        color: #111;
+        margin-bottom: .5rem
+    }
+
+    /* Kart ve layout */
+    .section-card {
+        border: 1px solid #e9ecef;
+        border-radius: 12px;
+        padding: 12px;
+        background: #fff;
+        margin-bottom: 12px
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: .5rem
+    }
+
+        .section-header h5 {
+            margin: 0;
+            font-weight: 700
+        }
+
+    .kv-grid {
+        display: grid;
+        grid-template-columns: repeat(12,minmax(0,1fr));
+        gap: .5rem
+    }
+
+        .kv-grid > div {
+            grid-column: span 6;
+            background: #fafafa;
+            border: 1px solid #f1f3f5;
+            border-radius: 8px;
+            padding: .5rem .75rem
+        }
+
+        .kv-grid dt {
+            font-weight: 600;
+            color: #555
+        }
+
+        .kv-grid dd {
+            margin: 0;
+            color: #111
+        }
+
+        .kv-grid .kv-span2 {
+            grid-column: span 12
+        }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(6,minmax(0,1fr));
+        gap: .5rem;
+        align-items: end;
+        margin-top: .5rem
+    }
+
+    .col-span-3 {
+        grid-column: span 3
+    }
+
+    .col-span-2 {
+        grid-column: span 2
+    }
+
+    .mt-2 {
+        margin-top: .5rem
+    }
+
+    .row-actions {
+        margin-top: .5rem;
+        display: flex;
+        align-items: center;
+        gap: .5rem
+    }
+
+    /* Inputlar */
+    .input-text, .input-textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #cfd4dc;
+        border-radius: 8px;
+        background: #fff;
+        font-size: .95rem;
+        color: #1f2937;
+        transition: border-color .2s,box-shadow .2s
+    }
+
+        .input-text:focus, .input-textarea:focus {
+            outline: none;
+            border-color: #1976d2;
+            box-shadow: 0 0 0 3px rgba(25,118,210,.15)
+        }
+
+    .input-textarea {
+        min-height: 96px;
+        resize: vertical
+    }
+
+    /* Tablo */
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: .5rem
+    }
+
+        .table th {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 2px solid #e9ecef;
+            font-weight: 700;
+            color: #333
+        }
+
+        .table td {
+            padding: 8px;
+            border-bottom: 1px solid #f1f3f5
+        }
+
+        .table tr:hover td {
+            background: #fafcff
+        }
+
+    .text-right {
+        text-align: right
+    }
+
+    .pager {
+        margin-top: .5rem;
+        display: flex;
+        gap: .5rem;
+        align-items: center
+    }
+
+    /* ---- BUTON RENKLERİ (sınıfa göre) ---- */
+    .btn-green {
+        background: #28a745;
+        color: #fff;
+        border: none;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer
+    }
+
+        .btn-green:hover {
+            background: #218838
+        }
+
+    .btn-blue {
+        background: #1976d2;
+        color: #fff;
+        border: none;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer
+    }
+
+        .btn-blue:hover {
+            background: #145da3
+        }
+
+    .btn-danger {
+        background: #b00020;
+        color: #fff;
+        border: none;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer
+    }
+
+        .btn-danger:hover {
+            background: #94001a
+        }
+
+    /* Okuma kartı ve hata */
+    .read-card {
+        border: 1px solid #eee;
+        border-radius: 10px;
+        padding: .75rem;
+        background: #fafafa;
+        margin-top: .5rem
+    }
+
+    .err {
+        color: #b00020;
+        margin-left: .75rem
+    }
+
+    /* Razor'da media query için @@ ile kaçış */
+    @@media (max-width: 992px) {
+        .kv-grid > div {
+            grid-column: span 12
+        }
+
+        .form-grid {
+            grid-template-columns: repeat(2,minmax(0,1fr))
+        }
+
+        .col-span-3 {
+            grid-column: span 2
+        }
+    }
+</style>
+
+

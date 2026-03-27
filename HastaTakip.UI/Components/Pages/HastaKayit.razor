@@ -1,0 +1,628 @@
+﻿@page "/hastalar/yeni"
+@using System.Net
+@using HastaTakip.UI.Dtos
+@using HastaTakip.UI.Services
+@inject HastaApi Api
+@inject NavigationManager Nav
+@rendermode InteractiveServer
+
+
+@if (showSuccess)
+{
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:1000;">
+        <div style="background:#fff;padding:24px 32px;border-radius:12px;max-width:340px;text-align:center;">
+            <h4 style="margin:0 0 12px 0;">Kayıt tamamlandı ✅</h4>
+            <button class="btn-blue" @onclick="GotoList">Tamam</button>
+        </div>
+    </div>
+}
+
+
+@if (showError)
+{
+    <div style="position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:1000;">
+        <div style="background:#fff;padding:24px 32px;border-radius:12px;max-width:380px;text-align:center;">
+            <h4 style="margin:0 0 12px 0;">Uyarı / Hata ❌</h4>
+            <p style="margin:0 0 16px 0;">@error</p>
+            <button class="btn-blue" @onclick="CloseError">Tamam</button>
+        </div>
+    </div>
+}
+
+<h3>Yeni Hasta Kaydı</h3>
+
+<div class="form-page">
+
+    <!-- 1) HASTA -->
+    <section class="card">
+        <h4>1) Hasta</h4>
+        <div class="grid-3">
+            <label>TCKN<input @bind="hasta.TcKimlikNo" maxlength="11" /></label>
+            <label>Ad<input @bind="hasta.Ad" /></label>
+            <label>Soyad<input @bind="hasta.Soyad" /></label>
+
+            <label>
+                Cinsiyet
+                <select @bind="hasta.Cinsiyet">
+                    <option value="">Seçiniz</option>
+                    <option value="E">Erkek</option>
+                    <option value="K">Kadın</option>
+                </select>
+            </label>
+            <label>Doğum Tarihi<input type="date" @bind="hasta.BirthDate" /></label>
+            <label>Telefon<input @bind="hasta.Telefon" placeholder="05xx..." /></label>
+
+            <label>E-posta<input type="email" @bind="hasta.Email" /></label>
+            <label class="span-3">Adres<textarea rows="2" @bind="hasta.Adres"></textarea></label>
+        </div>
+    </section>
+
+    <!-- 2) AİLE ÜYELERİ -->
+    <section class="card">
+        <h4>2) Aile Üyeleri (opsiyonel)</h4>
+        <div class="grid-6 align-end">
+            <label>İlişki<input @bind="aileForm.Iliski" placeholder="Anne/Baba/Kardeş..." /></label>
+            <label>Ad<input @bind="aileForm.Ad" placeholder="İsim" /></label>
+            <label>Doğum<input type="date" @bind="aileForm.DogumTarihi" /></label>
+            <label>Boy (cm)<input type="number" step="0.1" @bind="aileForm.BoyCm" /></label>
+            <label>Kilo (kg)<input type="number" step="0.1" @bind="aileForm.AgirlikKg" /></label>
+            <div class="btn-cell">
+                <button type="button"
+                        class="btn-small"
+                        @onclick="AileEkle"
+                        disabled="@(string.IsNullOrWhiteSpace(aileForm.Iliski)
+                                                                   || string.IsNullOrWhiteSpace(aileForm.Ad)
+                                                                   || aileForm.DogumTarihi == null)">
+                    Ekle
+                </button>
+            </div>
+
+            <label class="span-3">Sağlık Durumu<input @bind="aileForm.SaglikDurumu" /></label>
+            <label class="span-2">Meslek<input @bind="aileForm.Meslek" /></label>
+        </div>
+
+        @if (aileUyeleri.Count > 0)
+        {
+            <ul class="list-inline">
+                @foreach (var au in aileUyeleri.Select((x, i) => new { x, i }))
+                {
+                    <li>
+                        <b>@au.x.Iliski</b> — @au.x.Ad (@(au.x.DogumTarihi?.ToString("dd.MM.yyyy") ?? "-"))
+                        <button type="button" class="btn-delete" @onclick="() => AileSil(au.i)">Sil</button>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <!-- 3) ÖYKÜLER -->
+    <section class="card">
+        <h4>3) Öyküler (opsiyonel)</h4>
+        <div class="grid-2">
+            <label class="span-2">Yakınmalar<textarea rows="2" @bind="oyku.Yakinmalar"></textarea></label>
+            <label class="span-2">Öyküsü<textarea rows="2" @bind="oyku.Oykusu"></textarea></label>
+
+            <label>Gebelik Öyküsü<input @bind="oyku.GebelikOykusu" /></label>
+            <label>Doğum Şekli<input @bind="oyku.DogumSekli" /></label>
+
+            <label>Doğum Ağırlığı<input @bind="oyku.DogumAgirlik" placeholder="örn: 3200 gr" /></label>
+            <label>Doğum Boyu<input @bind="oyku.DogumBoyu" placeholder="örn: 50 cm" /></label>
+
+            <label>Neonatal Dönem<input @bind="oyku.NeonatalDonem" /></label>
+            <label>Nör. Gelişim<input @bind="oyku.NorGelisim" /></label>
+            <label>Süt / Çocuk Beslenme<input @bind="oyku.SutcocukBeslenme" /></label>
+            <label>Geçirilen Hastalıklar<input @bind="oyku.GecirilenHast" /></label>
+            <label>Operasyon / Kaza<input @bind="oyku.OperasyonKaza" /></label>
+
+            <label class="span-2">
+                Kan Akrabalığı
+                <input @bind="oyku.KanAkrabaligi" placeholder="örn: Yok / 1. derece kuzen evliliği" />
+            </label>
+
+            <label>Kardeş Sağlığı<input @bind="oyku.KardesSagligi" /></label>
+            <label>Aile Hastalıkları<input @bind="oyku.AileHastaliklar" /></label>
+
+            <label>Oluşturma Tarihi<input type="datetime-local" @bind="oyku.OlusturmaTarihi" /></label>
+        </div>
+    </section>
+
+    <!-- 4) BESLENME / ALIŞKANLIKLAR -->
+    <section class="card">
+        <h4>4) Beslenme / Alışkanlıklar (opsiyonel)</h4>
+
+        <div class="grid-7 align-end">
+            <label>Tarih<input type="date" @bind="diyetForm.Tarih" /></label>
+            <label>Ekmek<input @bind="diyetForm.Ekmek" /></label>
+            <label>Tahıl<input @bind="diyetForm.Tahil" /></label>
+            <label>Et<input @bind="diyetForm.Et" /></label>
+            <label>Peynir<input @bind="diyetForm.Peynir" /></label>
+            <label>Süt<input @bind="diyetForm.Sut" /></label>
+            <label>Yoğurt<input @bind="diyetForm.Yogurt" /></label>
+
+            <label>Meyve<input @bind="diyetForm.Meyve" /></label>
+            <label>Sebze<input @bind="diyetForm.Sebze" /></label>
+            <label>Şekerli İçecek<input @bind="diyetForm.SiviGida" /></label>
+            <label>Abur Cubur<input @bind="diyetForm.AburCubur" /></label>
+            <label>Ekran Süresi<input @bind="diyetForm.EkranSuresi" /></label>
+
+            <div class="span-7">
+                <button type="button"
+                        class="btn-small"
+                        @onclick="DiyetEkle"
+                        disabled="@(diyetForm.Tarih == default)">
+                    Ekle
+                </button>
+            </div>
+        </div>
+
+        @if (diyetler.Count > 0)
+        {
+            <ul class="list-inline">
+                @foreach (var d in diyetler.Select((x, i) => new { x, i }))
+                {
+                    <li>
+                        <b>@(d.x.Tarih == default ? "-" : d.x.Tarih.ToString("dd.MM.yyyy"))</b> —
+                        Ekmek:@d.x.Ekmek,
+                        Tahıl:@d.x.Tahil,
+                        Et:@d.x.Et,
+                        Peynir:@d.x.Peynir,
+                        Süt:@d.x.Sut,
+                        Yoğurt:@d.x.Yogurt,
+                        Meyve:@d.x.Meyve,
+                        Sebze:@d.x.Sebze,
+                        Şekerli İçecek:@d.x.SiviGida,
+                        Abur Cubur:@d.x.AburCubur,
+                        Ekran Süresi:@d.x.EkranSuresi
+                        <button type="button" class="link-btn" @onclick="() => DiyetSil(d.i)">Sil</button>
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+
+    <!-- 5) ZİYARET + ANTROPOMETRİ -->
+    <section class="card">
+        <h4>5) İlk Ziyaret + Antropometri (opsiyonel)</h4>
+        <div class="grid-3">
+            <label>Ziyaret Tarihi<input type="date" @bind="ilkZiyaretTarihi" /></label>
+            <label class="span-2">Not<input @bind="ilkZiyaretNotu" /></label>
+
+            <label>Boy (cm)<input type="number" step="0.1" @bind="boy" min="30" max="220" /></label>
+            <label>Kilo (kg)<input type="number" step="0.1" @bind="kilo" min="1" max="200" /></label>
+            <label>Baş Çev. (cm)<input type="number" step="0.1" @bind="basCevresi" min="25" max="65" /></label>
+            <label>Oturma Boyu (cm)<input type="number" step="0.1" @bind="oturmaBoyuCm" min="20" max="140" /></label>
+        </div>
+    </section>
+
+    <!-- 6) PUBERTE FİZİK + YORUM PLAN -->
+    <section class="card">
+        <h4>6) PuberteFizik & YorumPlan (opsiyonel)</h4>
+        <div class="grid-2">
+            <label>Puberte Notu<input @bind="pf.PuberteNotu" /></label>
+            <label>Patolojik Fizik<input @bind="pf.PatolojikFizik" /></label>
+            <label class="span-2">Tedavi/Beslenme/Spor<textarea rows="2" @bind="yp.TedaviBeslenmeSpor"></textarea></label>
+            <label class="span-2">Yorum Notlar<textarea rows="2" @bind="yp.YorumNotlar"></textarea></label>
+            <label>Oluşturma Tarihi<input type="datetime-local" @bind="yp.OlusturmaTarihi" /></label>
+        </div>
+    </section>
+
+    <!-- 7) KLİNİK ÖZET -->
+    <section class="card">
+        <h4>7) Klinik Özet (opsiyonel)</h4>
+        <div class="grid-3">
+            <label>Kulaç (cm)<input type="number" step="0.1" @bind="ozet.KulacCm" /></label>
+            <label>Hedef Boy (cm)<input type="number" step="0.1" @bind="ozet.HedefBoyCm" /></label>
+            <label class="span-2">Boya Uyan Tartı<input type="text" maxlength="50" @bind="ozet.BoyaUyanTarti" /></label>
+        </div>
+    </section>
+
+    <!-- KAYDET BUTONU -->
+    <div class="actions">
+        <button type="button" class="btn-save" @onclick="Kaydet" disabled="@busy">Kaydet</button>
+        @if (busy)
+        {
+            <span class="saving">Kaydediliyor…</span>
+        }
+    </div>
+</div>
+
+@code {
+    // --- State ---
+    string? error, success; bool busy;
+    bool showSuccess;
+    bool showError;
+
+    void GotoList()
+    {
+        showSuccess = false;
+        Nav.NavigateTo("/hastalar");
+    }
+
+    void CloseError()
+    {
+        showError = false;
+    }
+
+    void ShowError(string message)
+    {
+        error = message;
+        showError = true;
+    }
+
+    // 1) Hasta
+    PatientCreateDto hasta = new();
+
+    // 2) Aile üyeleri
+    List<AileUyesiCreateDto> aileUyeleri = new();
+    AileUyesiCreateDto aileForm = new();
+
+    // 3) Öyküler (tek)
+    OykulerCreateDto oyku = new();
+
+    // 4) Diyetler
+    List<DiyetCreateDto> diyetler = new();
+    DiyetCreateDto diyetForm = new() { Tarih = DateTime.Today };
+
+    // 5) Ziyaret + Antropometri
+    DateTime ilkZiyaretTarihi = DateTime.Today;
+    string? ilkZiyaretNotu;
+    decimal? boy, kilo, basCevresi, oturmaBoyuCm;
+
+    // 6) PuberteFizik + YorumPlan
+    PuberteFizikCreateDto pf = new();
+    YorumPlanCreateDto yp = new();
+
+    // 7) Klinik Özet
+    OzetHesapCreateDto ozet = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { await Api.HealthAsync(); }
+        catch { ShowError("API bağlantısı kurulamadı."); }
+    }
+
+    void AileEkle()
+    {
+        if (string.IsNullOrWhiteSpace(aileForm.Iliski) || string.IsNullOrWhiteSpace(aileForm.Ad))
+        { ShowError("Aile üyesi için İlişki ve Ad zorunludur."); return; }
+
+        aileUyeleri.Add(aileForm);
+        aileForm = new(); error = null;
+    }
+    void AileSil(int i) => aileUyeleri.RemoveAt(i);
+
+    void DiyetEkle()
+    {
+        if (diyetForm.Tarih == default) { ShowError("Diyet için tarih zorunludur."); return; }
+        diyetler.Add(diyetForm);
+        diyetForm = new() { Tarih = DateTime.Today }; error = null;
+    }
+    void DiyetSil(int i) => diyetler.RemoveAt(i);
+
+    async Task Kaydet()
+    {
+        error = success = null;
+        showError = false;
+
+        if (oturmaBoyuCm.HasValue && (oturmaBoyuCm < 20 || oturmaBoyuCm > 140))
+        { ShowError("Oturma boyu 20–140 cm aralığında olmalı."); return; }
+
+        if (string.IsNullOrWhiteSpace(hasta.TcKimlikNo) ||
+            !System.Text.RegularExpressions.Regex.IsMatch(hasta.TcKimlikNo, "^[1-9][0-9]{10}$"))
+        { ShowError("TCKN zorunlu; 11 hane ve 0 ile başlamamalı."); return; }
+
+        if (string.IsNullOrWhiteSpace(hasta.Cinsiyet) || (hasta.Cinsiyet != "E" && hasta.Cinsiyet != "K"))
+        { ShowError("Cinsiyet zorunlu; 'E' veya 'K' seçin."); return; }
+
+        if (!hasta.BirthDate.HasValue || hasta.BirthDate.Value.Date > DateTime.Today)
+        { ShowError("Doğum tarihi zorunlu ve gelecekte olamaz."); return; }
+
+        if (string.IsNullOrWhiteSpace(hasta.Ad) || string.IsNullOrWhiteSpace(hasta.Soyad))
+        { ShowError("Ad ve Soyad zorunludur."); return; }
+
+        if (boy.HasValue && (boy < 30 || boy > 220)) { ShowError("Boy 30–220."); return; }
+        if (kilo.HasValue && (kilo < 1 || kilo > 200)) { ShowError("Kilo 1–200."); return; }
+        if (basCevresi.HasValue && (basCevresi < 25 || basCevresi > 65)) { ShowError("Baş çev. 25–65."); return; }
+
+        if (!string.IsNullOrWhiteSpace(ozet.BoyaUyanTarti) && ozet.BoyaUyanTarti!.Length > 50)
+        { ShowError("Boya Uyan Tartı en fazla 50 karakter olabilir."); return; }
+
+        try
+        {
+            busy = true;
+
+            
+            try
+            {
+                var existing = await Api.GetPatientByTcAsync(hasta.TcKimlikNo!);
+                if (existing is not null)
+                { ShowError($"Bu TCKN ile kayıt zaten var (Id: {existing.Id})."); return; }
+            }
+            catch (HttpRequestException httpEx) when (httpEx.StatusCode == HttpStatusCode.NotFound)
+            {  }
+
+            if (aileUyeleri.Count == 0 &&
+                !string.IsNullOrWhiteSpace(aileForm.Iliski) &&
+                !string.IsNullOrWhiteSpace(aileForm.Ad))
+                aileUyeleri.Add(aileForm);
+
+            if (diyetler.Count == 0 && diyetForm.Tarih != default)
+                diyetler.Add(diyetForm);
+
+            var req = new RegisterRequestDto
+            {
+                Hasta = hasta,
+                AileUyeleri = aileUyeleri.Count > 0 ? aileUyeleri : null,
+                Oykuler = Any(oyku) ? oyku : null,
+                Diyetler = diyetler.Count > 0 ? diyetler : null,
+
+                Ziyaret = new ZiyaretCreateDto
+                {
+                    Tarih = ilkZiyaretTarihi,
+                    Notlar = string.IsNullOrWhiteSpace(ilkZiyaretNotu) ? null : ilkZiyaretNotu
+                },
+
+                Antropometri = (boy.HasValue || kilo.HasValue || basCevresi.HasValue || oturmaBoyuCm.HasValue)
+                  ? new AntropometriCreateDto
+                  {
+                      BoyCm = boy,
+                      KiloKg = kilo,
+                      BasCevresiCm = basCevresi,
+                      OturmaBoyuCm = oturmaBoyuCm
+                  } : null,
+
+                PuberteFizik = Any(pf) ? pf : null,
+                YorumPlan = Any(yp) ? yp : null,
+
+                OzetHesap = Any(ozet) ? new OzetHesapCreateDto
+                {
+                    KulacCm = ozet.KulacCm,
+                    HedefBoyCm = ozet.HedefBoyCm,
+                    BoyaUyanTarti = string.IsNullOrWhiteSpace(ozet.BoyaUyanTarti) ? null : ozet.BoyaUyanTarti.Trim()
+                } : null
+            };
+
+            var resp = await Api.RegisterAsync(req);
+
+            success = $"Kayıt tamamlandı. HastaID: {resp.HastaId}"
+                   + (resp.ZiyaretId is not null ? $", ZiyaretID: {resp.ZiyaretId}" : "")
+                   + (resp.AntropometriId is not null ? $", AntropometriID: {resp.AntropometriId}" : "")
+                   + (resp.OzetId is not null ? $", OzetID: {resp.OzetId}" : "");
+
+            showSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex.Message);
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    static bool Any(OykulerCreateDto o) =>
+    !string.IsNullOrWhiteSpace(o.Yakinmalar) ||
+    !string.IsNullOrWhiteSpace(o.Oykusu) ||
+    !string.IsNullOrWhiteSpace(o.GebelikOykusu) ||
+    !string.IsNullOrWhiteSpace(o.DogumSekli) ||
+    !string.IsNullOrWhiteSpace(o.DogumAgirlik) ||
+    !string.IsNullOrWhiteSpace(o.DogumBoyu) ||
+    !string.IsNullOrWhiteSpace(o.NeonatalDonem) ||
+    !string.IsNullOrWhiteSpace(o.NorGelisim) ||
+    !string.IsNullOrWhiteSpace(o.SutcocukBeslenme) ||
+    !string.IsNullOrWhiteSpace(o.GecirilenHast) ||
+    !string.IsNullOrWhiteSpace(o.OperasyonKaza) ||
+    !string.IsNullOrWhiteSpace(o.KanAkrabaligi) ||
+    !string.IsNullOrWhiteSpace(o.KardesSagligi) ||
+    !string.IsNullOrWhiteSpace(o.AileHastaliklar) ||
+    o.OlusturmaTarihi != default;
+
+    static bool Any(PuberteFizikCreateDto p) =>
+        !string.IsNullOrWhiteSpace(p.PuberteNotu) || !string.IsNullOrWhiteSpace(p.PatolojikFizik);
+
+    static bool Any(YorumPlanCreateDto y) =>
+        !string.IsNullOrWhiteSpace(y.TedaviBeslenmeSpor) || !string.IsNullOrWhiteSpace(y.YorumNotlar) || y.OlusturmaTarihi != default;
+
+    static bool Any(OzetHesapCreateDto o) =>
+        o is not null && (o.KulacCm.HasValue || o.HedefBoyCm.HasValue || !string.IsNullOrWhiteSpace(o.BoyaUyanTarti));
+}
+
+<style>
+    
+    .form-page {
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        padding: 0 16px 24px 16px;
+        display: block;
+    }
+
+    .card {
+        background: #fff;
+        border: 1px solid #e6e6e6;
+        border-radius: 8px;
+        padding: 14px;
+        margin-bottom: 14px;
+        width: 100%;
+    }
+
+        .card h4 {
+            margin: 0 0 10px;
+            font-weight: 600;
+        }
+
+    .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2,minmax(0,1fr));
+        gap: 12px;
+    }
+
+    .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3,minmax(0,1fr));
+        gap: 12px;
+    }
+
+    .grid-6 {
+        display: grid;
+        grid-template-columns: repeat(6,minmax(0,1fr));
+        gap: 12px;
+    }
+
+    .grid-7 {
+        display: grid;
+        grid-template-columns: repeat(7,minmax(0,1fr));
+        gap: 12px;
+    }
+
+    .align-end {
+        align-items: end;
+    }
+
+    .span-2 {
+        grid-column: span 2;
+    }
+
+    .span-3 {
+        grid-column: span 3;
+    }
+
+    .span-7 {
+        grid-column: span 7;
+    }
+
+    label {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        font-size: 13px;
+        color: #444;
+    }
+
+        label input, label select, label textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 8px 10px;
+            border: 1px solid #cfd3d7;
+            border-radius: 6px;
+            background: #fff;
+            color: #111;
+        }
+
+        label textarea {
+            resize: vertical;
+        }
+
+    .list-inline {
+        margin: .5rem 0 0;
+        padding-left: 1rem;
+    }
+
+    .link-btn {
+        margin-left: .5rem;
+        background: transparent;
+        color: #1976d2;
+        border: none;
+        cursor: pointer;
+    }
+
+        .link-btn:hover {
+            text-decoration: underline;
+        }
+
+    .btn-cell {
+        display: flex;
+        align-items: end;
+    }
+
+    .actions {
+        margin-top: .5rem;
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+
+    .saving {
+        color: #555;
+    }
+
+    @@media (max-width:1024px) {
+        .grid-6 {
+            grid-template-columns: repeat(3,minmax(0,1fr));
+        }
+
+        .grid-7 {
+            grid-template-columns: repeat(4,minmax(0,1fr));
+        }
+    }
+
+    @@media (max-width:680px) {
+        .grid-7, .grid-6, .grid-3, .grid-2 {
+            grid-template-columns: 1fr;
+        }
+
+        .span-2, .span-3, .span-7 {
+            grid-column: 1 / -1;
+        }
+    }
+
+    .btn-small {
+        padding: 6px 14px;
+        background-color: #1976d2;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        width: fit-content;
+        justify-self: start;
+        font-weight: 500;
+        transition: background-color .2s;
+    }
+
+        .btn-small:hover {
+            background-color: #145ca8;
+        }
+
+        .btn-small:disabled {
+            background-color: #aac7eb;
+            color: #f5f5f5;
+            cursor: not-allowed;
+        }
+
+    .btn-save {
+        background-color: #28a745;
+        color: #fff;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+
+        .btn-save:hover {
+            background-color: #218838;
+        }
+
+        .btn-save:disabled {
+            background-color: #94d3a2;
+            cursor: not-allowed;
+        }
+
+    .btn-delete {
+        margin-left: .5rem;
+        background-color: #dc3545;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 4px 10px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: background-color .2s;
+    }
+
+        .btn-delete:hover {
+            background-color: #b02a37;
+        }
+</style>

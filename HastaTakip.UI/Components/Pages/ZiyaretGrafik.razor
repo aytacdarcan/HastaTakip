@@ -1,0 +1,217 @@
+﻿@page "/ziyaretler/{ziyaretId:int}/grafik"
+@rendermode InteractiveServer
+@using System.Linq
+@using HastaTakip.UI.Dtos
+@inject HastaTakip.UI.Services.HastaApi Api
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+<h3>Ziyaret Grafikleri</h3>
+
+@if (loading)
+{
+    <p>Yükleniyor…</p>
+}
+else if (!string.IsNullOrEmpty(error))
+{
+    <p style="color:#b00020">@error</p>
+}
+else
+{
+    <div style="margin-bottom:.75rem;">
+        <button type="button" class="btn btn-secondary" @onclick="Back">Geri</button>
+    </div>
+
+    <section style="margin-bottom:1rem;">
+        <h5>Boy (cm)</h5>
+        @if (needBoy)
+        {
+            <canvas id="boyCanvas" width="800" height="360"></canvas>
+        }
+        else
+        {
+
+            <div style="color:#777;">Veri bulunamadı.</div>
+        }
+    </section>
+
+    <section style="margin-bottom:1rem;">
+        <h5>Kilo (kg)</h5>
+        @if (needKilo)
+        {
+            <canvas id="kiloCanvas" width="800" height="360"></canvas>
+        }
+        else
+        {
+
+            <div style="color:#777;">Veri bulunamadı.</div>
+        }
+    </section>
+
+    <section style="margin-bottom:1rem;">
+        <h5>BKI</h5>
+        @if (needBki)
+        {
+            <canvas id="bkiCanvas" width="800" height="360"></canvas>
+        }
+        else
+        {
+
+            <div style="color:#777;">Veri bulunamadı.</div>
+        }
+    </section>
+
+    @if (hasBasCevresi)
+    {
+        <section style="margin-bottom:1rem;">
+            <h5>Baş Çevresi (cm)</h5>
+            @if (needBas)
+            {
+                <canvas id="basCanvas" width="800" height="360"></canvas>
+            }
+            else
+            {
+
+                <div style="color:#777;">Veri bulunamadı.</div>
+            }
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public int ziyaretId { get; set; }
+
+    bool loading = true;
+    string? error;
+
+    object? boyPayload, kiloPayload, bkiPayload, basPayload;
+    bool needBoy, needKilo, needBki, needBas;
+    bool hasBasCevresi;
+
+    protected override void OnParametersSet()
+    {
+        loading = true;
+        error = null;
+    }
+
+    bool IsPopup => new Uri(Nav.Uri).Query.Contains("popup=1", StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }
+
+        if (needBoy && boyPayload is not null)
+        {
+            needBoy = false;
+            await JS.InvokeVoidAsync("growthChart.render", "boyCanvas", boyPayload);
+        }
+        if (needKilo && kiloPayload is not null)
+        {
+            needKilo = false;
+            await JS.InvokeVoidAsync("growthChart.render", "kiloCanvas", kiloPayload);
+        }
+        if (needBki && bkiPayload is not null)
+        {
+            needBki = false;
+            await JS.InvokeVoidAsync("growthChart.render", "bkiCanvas", bkiPayload);
+        }
+        if (hasBasCevresi && needBas && basPayload is not null)
+        {
+            needBas = false;
+            await JS.InvokeVoidAsync("growthChart.render", "basCanvas", basPayload);
+        }
+    }
+
+    async Task LoadAsync()
+    {
+        try
+        {
+            var bundle = await Api.GetZiyaretBundleAsync(ziyaretId);
+            if (bundle is null) { error = "Ziyaret bulunamadı."; return; }
+
+            var hid = bundle.Ziyaret?.HastaID ?? 0;
+            var tHasta = hid > 0 ? Api.GetPatientAsync(hid) : Task.FromResult<PatientDetailDto?>(null);
+            var tAnthros = Api.GetAnthroByVisitAsync(ziyaretId);
+            await Task.WhenAll(tHasta, tAnthros);
+
+            var hasta = tHasta.Result;
+            var anthros = tAnthros.Result;
+
+            char sex = !string.IsNullOrWhiteSpace(hasta?.Cinsiyet) ? hasta!.Cinsiyet![0] : 'E';
+
+            //  ZİYARET YAŞI (AY)
+            int? visitAgeMonths = null;
+            if (bundle.Ziyaret?.Tarih is DateTime vd && hasta?.BirthDate is DateTime bd)
+            {
+                visitAgeMonths = (vd.Year - bd.Year) * 12 + (vd.Month - bd.Month);
+            }
+
+            bool isMonthly = visitAgeMonths.HasValue && visitAgeMonths.Value <= 36;
+
+            //  POINTS (tek nokta)
+            var boyPoints = anthros.Where(a => a.BoyCm.HasValue)
+                .Select(a => new { ageMonths = visitAgeMonths ?? 0, value = a.BoyCm!.Value }).ToList();
+
+            var kiloPoints = anthros.Where(a => a.KiloKg.HasValue)
+                .Select(a => new { ageMonths = visitAgeMonths ?? 0, value = a.KiloKg!.Value }).ToList();
+
+            var bkiPoints = anthros.Where(a => a.BKI.HasValue)
+                .Select(a => new { ageMonths = visitAgeMonths ?? 0, value = a.BKI!.Value }).ToList();
+
+            var basPoints = anthros.Where(a => a.BasCevresiCm.HasValue)
+                .Select(a => new { ageMonths = visitAgeMonths ?? 0, value = a.BasCevresiCm!.Value }).ToList();
+
+            hasBasCevresi = basPoints.Count > 0;
+
+            //  REFS
+            int step = isMonthly ? 3 : 12;
+            int maxMonth = isMonthly ? 36 : 216;
+
+            var refsBoy = await Api.GetGrowthRefsAsync("BoyCm", sex, maxMonth, step) ?? new();
+            var refsKilo = await Api.GetGrowthRefsAsync("KiloKg", sex, maxMonth, step) ?? new();
+            var refsBki = await Api.GetGrowthRefsAsync("BKI", sex, maxMonth, step) ?? new();
+            var refsBas = hasBasCevresi
+                ? await Api.GetGrowthRefsAsync("BasCevresiCm", sex, maxMonth, step) ?? new()
+                : new();
+
+            // PAYLOADS
+            boyPayload = new { measure = "Boy (cm)", refs = refsBoy, points = boyPoints, visitAgeMonths };
+            kiloPayload = new { measure = "Kilo (kg)", refs = refsKilo, points = kiloPoints, visitAgeMonths, isMonthly };
+            bkiPayload = new { measure = "BKI", refs = refsBki, points = bkiPoints, visitAgeMonths, isMonthly };
+            if (hasBasCevresi)
+                basPayload = new { measure = "Baş Çevresi (cm)", refs = refsBas, points = basPoints, visitAgeMonths, isMonthly };
+
+
+            needBoy = boyPoints.Count > 0 || refsBoy.Count > 0;
+            needKilo = kiloPoints.Count > 0 || refsKilo.Count > 0;
+            needBki = bkiPoints.Count > 0 || refsBki.Count > 0;
+            needBas = hasBasCevresi && refsBas.Count > 0;
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { loading = false; }
+    }
+
+    void Back() => Nav.NavigateTo($"/ziyaretler/{ziyaretId}");
+}
+<style>
+    
+    nav,
+    .sidebar,
+    .left-menu,
+    .app-left,
+    .layout-left {
+        display: none !important;
+    }
+
+    main,
+    .page,
+    .content,
+    .app-content {
+        margin-left: 0 !important;
+        padding-left: 16px !important;
+    }
+</style>
